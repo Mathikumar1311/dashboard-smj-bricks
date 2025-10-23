@@ -18,4 +18,5 @@ release-builds/
 *.app
 *.dmg
 *.deb
-*.rpm
+*.rpm"node_modules/" 
+"dist/" 
