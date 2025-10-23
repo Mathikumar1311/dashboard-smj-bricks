@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body>
+    <!-- Login Section -->
+    <section id="loginSection" class="login-section">
+        <div class="login-container">
+            <div class="login-card">
+                <h1 data-lang="login_title"><i class="fas fa-chart-line"></i> Business Dashboard</h1>
+                <form id="loginForm" class="login-form">
+                    <div class="form-group">
+                        <label data-lang="username"><i class="fas fa-user"></i> Username</label>
+                        <input type="text" id="username" name="username" required autocomplete="username">
+                    </div>
+                    <div class="form-group password-group">
+                        <label data-lang="password"><i class="fas fa-lock"></i> Password</label>
+                        <div class="password-input-container">
+                            <input type="password" id="password" name="password" required
+                                autocomplete="current-password">
+                            <button type="button" class="password-toggle">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" data-lang="login">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </form>
+                <div id="loginError" class="error-message hidden"></div>
+
+                <!-- Demo Credentials -->
+                <div class="demo-credentials">
+                    <h3>Demo Credentials:</h3>
+                    <p><strong>Admin:</strong> admin / admin123</p>
+                    <p><strong>Manager:</strong> manager / manager123</p>
+                    <p><strong>Supervisor:</strong> supervisor / supervisor123</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Section -->
+    <section id="dashboardSection" class="dashboard-section hidden">
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button id="sidebarToggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 data-lang="dashboard_title"><i class="fas fa-chart-line"></i> Business Dashboard</h1>
+            </div>
+            <div class="topbar-right">
+                <select id="languageSelect" class="language-select">
+                    <option value="en">English</option>
+                    <option value="ta">தமிழ்</option>
+                </select>
+
+                <button id="themeToggle" class="theme-toggle" title="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+
+                <div id="dbStatus" class="db-status disconnected">
+                    <i class="fas fa-database"></i> <span>Checking...</span>
+                </div>
+
+                <div class="user-info">
+                    <img id="userAvatar" class="user-avatar"
+                        src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff" alt="User Avatar">
+                    <span id="userName"></span>
+                    <button id="logoutBtn" class="btn-secondary" data-lang="logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard-container">
+            <!-- Sidebar -->
+            <nav id="sidebar" class="sidebar">
+                <ul class="nav-menu">
+                    <li><a href="#dashboard" class="nav-link active" data-section="dashboard">
+                            <i class="fas fa-tachometer-alt"></i> <span data-lang="dashboard">Dashboard</span>
+                        </a></li>
+                    <li class="admin-only"><a href="#users" class="nav-link" data-section="users">
+                            <i class="fas fa-users"></i> <span data-lang="users">Users</span>
+                        </a></li>
+                    <li class="admin-manager"><a href="#employees" class="nav-link" data-section="employees">
+                            <i class="fas fa-user-tie"></i> <span data-lang="employees">Employees</span>
+                        </a></li>
+                    <li class="admin-manager"><a href="#salary" class="nav-link" data-section="salary">
+                            <i class="fas fa-money-bill-wave"></i> <span data-lang="salary">Salary</span>
+                        </a></li>
+                    <li class="admin-supervisor"><a href="#billing" class="nav-link" data-section="billing">
+                            <i class="fas fa-file-invoice-dollar"></i> <span data-lang="billing">Billing</span>
+                        </a></li>
+                    <li class="admin-supervisor"><a href="#customers" class="nav-link" data-section="customers">
+                            <i class="fas fa-user-friends"></i> <span data-lang="customers">Customers</span>
+                        </a></li>
+                    <li class="admin-supervisor"><a href="#pending" class="nav-link" data-section="pending">
+                            <i class="fas fa-clock"></i> <span data-lang="pending">Pending</span>
+                        </a></li>
+                    <li class="admin-supervisor"><a href="#payments" class="nav-link" data-section="payments">
+                            <i class="fas fa-credit-card"></i> <span data-lang="payments">Payments</span>
+                        </a></li>
+                    <li><a href="#reports" class="nav-link" data-section="reports">
+                            <i class="fas fa-chart-bar"></i> <span data-lang="reports">Reports</span>
+                        </a></li>
+                    <li class="settings-item"><a href="#settings" class="nav-link" data-section="settings">
+                            <i class="fas fa-cog"></i> <span data-lang="settings">Settings</span>
+                        </a></li>
+                </ul>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Dashboard Content -->
+                <div id="dashboardContent" class="content-section active">
+                    <div class="content-header">
+                        <h2 data-lang="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</h2>
+                        <div class="online-users">
+                            <span data-lang="users_online">Users online:</span>
+                            <span id="onlineUsersCount">0</span>
+                        </div>
+                    </div>
+                    <div class="cards-grid">
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-wallet"></i></div>
+                            <h3 data-lang="total_balance">Total Sales</h3>
+                            <p class="card-value" id="totalBalance">₹0</p>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-percentage"></i></div>
+                            <h3 data-lang="gst_amount">GST Amount</h3>
+                            <p class="card-value" id="gstAmount">₹0</p>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-chart-line"></i></div>
+                            <h3 data-lang="recent_activity">Total Bills</h3>
+                            <p class="card-value" id="recentActivity">0</p>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-clock"></i></div>
+                            <h3 data-lang="pending_payments">Pending Bills</h3>
+                            <p class="card-value" id="pendingPayments">0</p>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-users"></i></div>
+                            <h3 data-lang="total_customers">Total Customers</h3>
+                            <p class="card-value" id="totalCustomers">0</p>
+                        </div>
+                        <div class="card">
+                            <div class="card-icon"><i class="fas fa-user-tie"></i></div>
+                            <h3 data-lang="total_employees">Total Employees</h3>
+                            <p class="card-value" id="totalEmployees">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users Content -->
+                <div id="usersContent" class="content-section">
+                    <div class="content-header">
+                        <h2><i class="fas fa-users"></i> User Management</h2>
+                        <div class="header-actions">
+                            <button id="addUserBtn" class="btn-primary">
+                                <i class="fas fa-plus"></i> Add User
+                            </button>
+                            <button id="exportUsersBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="usersTable">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Role</th>
+                                    <th>Created Date</th>
+                                    <th>Status</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- Users will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Employees Content -->
+                <div id="employeesContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="employees"><i class="fas fa-user-tie"></i> Employees</h2>
+                        <div class="header-actions">
+                            <!-- Search Box -->
+                            <div class="search-container">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="employeeSearch"
+                                        placeholder="Search by ID, name, phone, role..."
+                                        data-lang="search_employees_placeholder" />
+                                    <button id="clearSearchBtn" class="btn-secondary btn-sm" style="display: none;"
+                                        title="Clear search">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button id="exportEmployeesBtn" class="btn-secondary" data-lang="export">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <button id="addEmployeeBtn" class="btn-primary" data-lang="add_employee">
+                                <i class="fas fa-plus"></i> Add Employee
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Search Results Counter -->
+                    <div id="searchResultsCount" class="search-results-count">
+                        <!-- Search results count will be displayed here -->
+                    </div>
+
+                    <div class="table-container">
+                        <table id="employeesTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="employee_id">Employee ID</th>
+                                    <th data-lang="name">Name</th>
+                                    <th data-lang="phone">Phone</th>
+                                    <th data-lang="type">Type</th>
+                                    <th data-lang="role">Role</th>
+                                    <th data-lang="join_date">Join Date</th>
+                                    <th data-lang="total_salary">Total Salary</th>
+                                    <th data-lang="actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeesTableBody">
+                                <!-- Employees will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Salary Content -->
+                <div id="salaryContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="salary"><i class="fas fa-money-bill-wave"></i> Salary Management</h2>
+                    </div>
+                    <!-- Update your salary form section -->
+                    <div class="salary-form-container">
+                        <form id="salaryForm" class="form-card">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Employee</label>
+                                    <select id="salaryEmployee" required>
+                                        <option value="">Select Employee</option>
+                                        <!-- Options will be populated by JavaScript -->
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Date</label>
+                                    <input type="date" id="salaryDate" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Base Salary (₹)</label>
+                                    <input type="number" id="salaryAmount" required min="0" step="0.01">
+                                </div>
+                                <div class="form-group">
+                                    <label>Incentive Amount (₹)</label>
+                                    <input type="number" id="incentiveAmount" min="0" step="0.01" value="0">
+                                </div>
+                                <div class="form-group">
+                                    <label>Total Amount (₹)</label>
+                                    <input type="text" id="totalAmount" readonly class="readonly-field">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary">
+                                <i class="fas fa-plus"></i> Add Salary Payment
+                            </button>
+                        </form>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-actions">
+                            <button id="exportSalaryBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <table id="salaryTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="employee_id">Employee ID</th>
+                                    <th data-lang="employee">Employee</th>
+                                    <th data-lang="date">Date</th>
+                                    <th data-lang="amount">Amount</th>
+                                    <th data-lang="incentive_amount">Incentive</th>
+                                    <th data-lang="actions">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salaryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Billing Content -->
+                <div id="billingContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="billing"><i class="fas fa-file-invoice-dollar"></i> Billing</h2>
+                        <button id="addBillBtn" class="btn-primary" data-lang="add_bill">
+                            <i class="fas fa-plus"></i> Add Bill
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-actions">
+                            <button id="exportBillsBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <table id="billsTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="bill_no">Bill No</th>
+                                    <th data-lang="customer">Customer</th>
+                                    <th data-lang="amount">Amount</th>
+                                    <th data-lang="gst">GST</th>
+                                    <th data-lang="date">Date</th>
+                                    <th data-lang="status">Status</th>
+                                    <th data-lang="actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="billsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Customers Content -->
+                <div id="customersContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="customers"><i class="fas fa-user-friends"></i> Customers</h2>
+                        <button id="addCustomerBtn" class="btn-primary" data-lang="add_customer">
+                            <i class="fas fa-plus"></i> Add Customer
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-actions">
+                            <button id="exportCustomersBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <table id="customersTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="name">Name</th>
+                                    <th data-lang="phone">Phone</th>
+                                    <th data-lang="email">Email</th>
+                                    <th data-lang="total_bills">Total Bills</th>
+                                    <th data-lang="total_amount">Total Amount</th>
+                                    <th data-lang="actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pending Content -->
+                <div id="pendingContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="pending"><i class="fas fa-clock"></i> Pending Bills</h2>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-actions">
+                            <button id="exportPendingBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <table id="pendingTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="bill_no">Bill No</th>
+                                    <th data-lang="customer">Customer</th>
+                                    <th data-lang="amount">Amount</th>
+                                    <th data-lang="due_date">Due Date</th>
+                                    <th data-lang="actions">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pendingTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Payments Content -->
+                <div id="paymentsContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="payments"><i class="fas fa-credit-card"></i> Payments</h2>
+                    </div>
+                    <div class="table-container">
+                        <div class="table-actions">
+                            <button id="exportPaymentsBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
+                        <table id="paymentsTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th data-lang="payment_id">Payment ID</th>
+                                    <th data-lang="bill_no">Bill No</th>
+                                    <th data-lang="customer">Customer</th>
+                                    <th data-lang="amount">Amount</th>
+                                    <th data-lang="date">Date</th>
+                                    <th data-lang="method">Method</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Reports Content -->
+                <div id="reportsContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="reports"><i class="fas fa-chart-bar"></i> Reports</h2>
+                        <div class="report-actions">
+                            <button id="exportExcel" class="export-btn">
+                                <i class="fas fa-file-excel"></i> Export Excel
+                            </button>
+                            <button id="exportPdf" class="export-btn pdf">
+                                <i class="fas fa-file-pdf"></i> Export PDF
+                            </button>
+                            <button id="backupData" class="btn-secondary">
+                                <i class="fas fa-database"></i> Backup Data
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="reports-grid">
+                        <div class="report-card">
+                            <h3>Sales Report</h3>
+                            <div class="report-controls">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Start Date</label>
+                                        <input type="date" id="reportStartDate">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>End Date</label>
+                                        <input type="date" id="reportEndDate">
+                                    </div>
+                                </div>
+                                <button id="generateReport" class="btn-primary">
+                                    <i class="fas fa-chart-bar"></i> Generate Report
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="report-card">
+                            <h3>Quick Statistics</h3>
+                            <div id="reportStats" class="report-stats">
+                                <!-- Stats will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="reportsTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Bill No</th>
+                                    <th>Customer</th>
+                                    <th>Amount</th>
+                                    <th>GST</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Settings Content -->
+                <div id="settingsContent" class="content-section">
+                    <div class="content-header">
+                        <h2 data-lang="settings"><i class="fas fa-cog"></i> Settings</h2>
+                    </div>
+                    <div class="settings-grid">
+                        <div class="settings-section">
+                            <h3 data-lang="profile_settings">Profile Settings</h3>
+                            <div class="avatar-upload">
+                                <img id="settingsAvatar" class="user-avatar large"
+                                    src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff"
+                                    alt="Avatar">
+                                <button id="uploadAvatarBtn" class="btn-primary">
+                                    <i class="fas fa-upload"></i> Upload Avatar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3>Theme Settings</h3>
+                            <div class="theme-selector">
+                                <div class="theme-options">
+                                    <div class="theme-option active" data-theme="orange">
+                                        <div class="theme-preview orange-theme"></div>
+                                        <span>Orange</span>
+                                    </div>
+                                    <div class="theme-option" data-theme="blue">
+                                        <div class="theme-preview blue-theme"></div>
+                                        <span>Blue</span>
+                                    </div>
+                                    <div class="theme-option" data-theme="green">
+                                        <div class="theme-preview green-theme"></div>
+                                        <span>Green</span>
+                                    </div>
+                                    <div class="theme-option" data-theme="purple">
+                                        <div class="theme-preview purple-theme"></div>
+                                        <span>Purple</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </section>
+
+    <!-- User Modal -->
+    <div id="userModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="userModalTitle">Add User</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="userForm" class="modal-form">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="userNameInput" required placeholder="Enter full name">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="userEmail" placeholder="Enter email address">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="userPhone" placeholder="Enter phone number">
+                </div>
+                <div class="form-group">
+                    <label>Role *</label>
+                    <select id="userRole" required>
+                        <option value="">Select Role</option>
+                        <option value="admin">Admin</option>
+                        <option value="manager">Manager</option>
+                        <option value="supervisor">Supervisor</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status *</label>
+                    <select id="userStatus" required>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Employee Modal -->
+    <div id="employeeModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="employeeModalTitle">Add Employee</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <form id="employeeForm" class="modal-form">
+                <input type="hidden" id="editEmployeeId">
+
+                <div class="form-group">
+                    <label>Employee Type *</label>
+                    <div class="form-row" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: 2px solid var(--border-color); border-radius: var(--border-radius); cursor: pointer; flex: 1;">
+                            <input type="radio" name="employeeType" value="employee" checked>
+                            <span>👨‍💼 Employee</span>
+                        </label>
+                        <label
+                            style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: 2px solid var(--border-color); border-radius: var(--border-radius); cursor: pointer; flex: 1;">
+                            <input type="radio" name="employeeType" value="driver">
+                            <span>🚗 Driver</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="employeeName" required placeholder="Enter full name">
+                </div>
+
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="employeePhone" placeholder="Enter phone number (optional)">
+                    <small style="color: #666; font-size: 0.8rem;">Same phone number can be used for multiple
+                        employees</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="employeeEmail" placeholder="Enter email address (optional)">
+                </div>
+
+                <div class="form-group">
+                    <label>Role *</label>
+                    <input type="text" id="employeeRole" required
+                        placeholder="e.g., Manager, Sales Executive, Delivery Driver">
+                </div>
+
+                <div class="form-group">
+                    <label>Join Date *</label>
+                    <input type="date" id="employeeJoinDate" required>
+                </div>
+
+                <div id="vehicleNumberField" class="form-group" style="display: none;">
+                    <label>Vehicle Number *</label>
+                    <input type="text" id="employeeVehicleNumber" placeholder="e.g., TN01AB1234">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bill Modal -->
+    <div id="billModal" class="modal hidden">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 id="billModalTitle">Add Bill</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="billForm" class="modal-form">
+                <input type="hidden" id="editBillId">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Bill No *</label>
+                        <input type="text" id="billNumber" required readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="billDate" required>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h4>Customer Details</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Customer Name *</label>
+                            <input type="text" id="customerName" required placeholder="Enter customer name">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone *</label>
+                            <input type="tel" id="customerPhone" required placeholder="Enter phone number">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="customerEmail" placeholder="Enter email address">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h4>Bill Items</h4>
+                    <div id="billItems">
+                        <!-- Bill items will be added here dynamically -->
+                    </div>
+                    <button type="button" id="addItemBtn" class="btn-secondary">
+                        <i class="fas fa-plus"></i> Add Item
+                    </button>
+                </div>
+
+                <div class="form-section">
+                    <h4>Bill Summary</h4>
+                    <div class="bill-summary">
+                        <div class="summary-row">
+                            <span>Sub Total:</span>
+                            <span id="subTotal">₹0.00</span>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>GST % *</label>
+                                <input type="number" id="billGst" value="18" min="0" max="100" required>
+                            </div>
+                            <div class="form-group">
+                                <label>GST Amount</label>
+                                <input type="text" id="gstAmountInput" readonly>
+                            </div>
+                        </div>
+                        <div class="summary-row total">
+                            <span>Total Amount:</span>
+                            <span id="totalAmount">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Bill</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customerModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="customerModalTitle">Add Customer</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="customerForm" class="modal-form">
+                <input type="hidden" id="editCustomerId">
+                <div class="form-group">
+                    <label>Name *</label>
+                    <input type="text" id="customerNameInput" required placeholder="Enter customer name">
+                </div>
+                <div class="form-group">
+                    <label>Phone *</label>
+                    <input type="tel" id="customerPhoneInput" required placeholder="Enter phone number">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="customerEmailInput" placeholder="Enter email address">
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="customerAddress" rows="3" placeholder="Enter customer address"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Customer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="hidden">
+        <div class="loading-container">
+            <div class="loading-spinner">
+                <div class="loading-ring"></div>
+                <i class="fas fa-chart-line loader-icon"></i>
+            </div>
+            <p class="loading-text">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/lang.js"></script>
+    <script src="js/db.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/user-manager.js"></script>
+    <script src="js/employee-manager.js"></script>
+    <script src="js/billing-manager.js"></script>
+    <script src="js/reports-manager.js"></script>
+    <script src="js/export-manager.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
