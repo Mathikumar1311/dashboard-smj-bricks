@@ -124,6 +124,10 @@ function initializeAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
   
+  // Add this line to disable signature verification
+  autoUpdater.disableWebInstaller = true;
+  
+  // Rest of your existing auto-updater code...
   autoUpdater.on('checking-for-update', () => {
     console.log('🔍 Checking for updates...');
     mainWindow?.webContents.send('update-status', { status: 'checking' });

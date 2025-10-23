@@ -40,14 +40,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ===== Utility =====
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
   
-  // ===== Remove Update Listeners =====
-  removeUpdateListeners: () => {
-    ipcRenderer.removeAllListeners('update-status');
-    ipcRenderer.removeAllListeners('update-available');
-    ipcRenderer.removeAllListeners('update-not-available');
-    ipcRenderer.removeAllListeners('download-progress');
-    ipcRenderer.removeAllListeners('update-downloaded');
-    ipcRenderer.removeAllListeners('update-error');
-    ipcRenderer.removeAllListeners('trigger-update-check');
-  }
+  /// Add this to your preload.js
+removeUpdateListeners: () => {
+  ipcRenderer.removeAllListeners('update-status');
+  ipcRenderer.removeAllListeners('update-available');
+  ipcRenderer.removeAllListeners('update-not-available');
+  ipcRenderer.removeAllListeners('download-progress');
+  ipcRenderer.removeAllListeners('update-downloaded');
+  ipcRenderer.removeAllListeners('update-error');
+}
 });

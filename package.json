@@ -1,6 +1,6 @@
 {
   "name": "business-dashboard",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Business Management Dashboard with Supabase Integration",
   "main": "main.js",
   "homepage": "./",
@@ -14,7 +14,8 @@
     "pack": "electron-builder --dir",
     "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build",
-    "publish": "electron-builder --publish=always"
+    "publish": "electron-builder --publish=always",
+    "publish:env": "electron-builder --publish=always"
   },
   "keywords": [
     "business",
@@ -27,6 +28,7 @@
   "author": "Mathikumar1311",
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^17.2.3",
     "electron-updater": "^6.1.1",
     "fs-extra": "^11.1.1"
   },
@@ -71,24 +73,33 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "ia32"]
+          "arch": [
+            "x64",
+            "ia32"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
-      "publisherName": "Business Dashboard"
+      "publisherName": "Business Dashboard",
+      "sign": false,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Business Dashboard"
+      "shortcutName": "Business Dashboard",
+      "perMachine": false
     },
     "mac": {
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "assets/icon.icns",
@@ -98,7 +109,9 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.png",

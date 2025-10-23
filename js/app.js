@@ -7,48 +7,72 @@ class UpdateManager {
     }
 
     setupEventListeners() {
-        // Update status events
-        window.electronAPI.onUpdateStatus((event, data) => {
-            console.log('Update status:', data.status);
-        });
+        // Safe event listener setup with checks
+        if (!window.electronAPI) {
+            console.warn('electronAPI not available - running in browser mode');
+            return;
+        }
 
-        window.electronAPI.onUpdateAvailable((event, data) => {
-            console.log('Update available:', data.version);
-            this.showUpdateAvailable(data);
-        });
+        // Update status events with safe access
+        if (window.electronAPI.onUpdateStatus) {
+            window.electronAPI.onUpdateStatus((event, data) => {
+                console.log('Update status:', data?.status);
+            });
+        }
 
-        window.electronAPI.onUpdateNotAvailable((event, data) => {
-            console.log('No update available');
-            if (this.isChecking) {
-                this.ui.showToast('You have the latest version!', 'success');
+        if (window.electronAPI.onUpdateAvailable) {
+            window.electronAPI.onUpdateAvailable((event, data) => {
+                console.log('Update available:', data?.version);
+                this.showUpdateAvailable(data);
+            });
+        }
+
+        if (window.electronAPI.onUpdateNotAvailable) {
+            window.electronAPI.onUpdateNotAvailable((event, data) => {
+                console.log('No update available');
+                if (this.isChecking) {
+                    this.ui.showToast('You have the latest version!', 'success');
+                    this.isChecking = false;
+                }
+            });
+        }
+
+        if (window.electronAPI.onDownloadProgress) {
+            window.electronAPI.onDownloadProgress((event, data) => {
+                this.showDownloadProgress(data?.percent || 0);
+            });
+        }
+
+        if (window.electronAPI.onUpdateDownloaded) {
+            window.electronAPI.onUpdateDownloaded((event, data) => {
+                console.log('Update downloaded:', data?.version);
+                this.updateDownloaded = true;
+                this.showUpdateReady(data);
+            });
+        }
+
+        if (window.electronAPI.onUpdateError) {
+            window.electronAPI.onUpdateError((event, error) => {
+                console.error('Update error:', error);
+                this.ui.showToast('Update failed: ' + (error?.message || 'Unknown error'), 'error');
                 this.isChecking = false;
-            }
-        });
-
-        window.electronAPI.onDownloadProgress((event, data) => {
-            this.showDownloadProgress(data.percent);
-        });
-
-        window.electronAPI.onUpdateDownloaded((event, data) => {
-            console.log('Update downloaded:', data.version);
-            this.updateDownloaded = true;
-            this.showUpdateReady(data);
-        });
-
-        window.electronAPI.onUpdateError((event, error) => {
-            console.error('Update error:', error);
-            this.ui.showToast('Update failed: ' + error.message, 'error');
-            this.isChecking = false;
-            this.hideUpdateUI();
-        });
+                this.hideUpdateUI();
+            });
+        }
     }
 
     async checkForUpdates() {
         if (this.isChecking) return;
-        
+
+        // Check if electronAPI is available
+        if (!window.electronAPI?.checkForUpdates) {
+            this.ui.showToast('Auto-update not available in browser', 'warning');
+            return;
+        }
+
         this.isChecking = true;
         this.ui.showToast('Checking for updates...', 'info');
-        
+
         try {
             await window.electronAPI.checkForUpdates();
         } catch (error) {
@@ -59,14 +83,20 @@ class UpdateManager {
     }
 
     showUpdateAvailable(updateInfo) {
+        if (!updateInfo) {
+            console.error('No update info provided');
+            return;
+        }
+
         const modalHtml = `
             <div id="updateAvailableModal" class="modal">
                 <div class="modal-content" style="max-width: 500px;">
                     <div class="modal-header">
                         <h3><i class="fas fa-download"></i> Update Available</h3>
+                        <button class="modal-close">&times;</button>
                     </div>
                     <div class="modal-body">
-                        <p><strong>Version ${updateInfo.version}</strong> is available!</p>
+                        <p><strong>Version ${updateInfo.version || 'Unknown'}</strong> is available!</p>
                         ${updateInfo.releaseNotes ? `
                             <div class="release-notes">
                                 <h4>What's New:</h4>
@@ -92,20 +122,24 @@ class UpdateManager {
         `;
 
         this.showUpdateModal(modalHtml, 'updateAvailableModal');
-        
-        document.getElementById('downloadUpdate').addEventListener('click', () => {
+
+        document.getElementById('downloadUpdate')?.addEventListener('click', () => {
             this.hideUpdateModal();
             this.showDownloadProgress(0);
         });
-        
-        document.getElementById('cancelUpdate').addEventListener('click', () => {
+
+        document.getElementById('cancelUpdate')?.addEventListener('click', () => {
+            this.hideUpdateModal();
+        });
+
+        document.querySelector('#updateAvailableModal .modal-close')?.addEventListener('click', () => {
             this.hideUpdateModal();
         });
     }
 
     showDownloadProgress(percent) {
         let progressContainer = document.getElementById('updateProgressContainer');
-        
+
         if (!progressContainer) {
             progressContainer = document.createElement('div');
             progressContainer.id = 'updateProgressContainer';
@@ -122,7 +156,7 @@ class UpdateManager {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                background: var(--card-bg);
+                background: var(--bg-primary);
                 border: 2px solid var(--primary-color);
                 border-radius: 8px;
                 padding: 1rem;
@@ -135,10 +169,10 @@ class UpdateManager {
 
         const progressFill = document.getElementById('updateProgressFill');
         const progressText = document.getElementById('updateProgressText');
-        
+
         if (progressFill) progressFill.style.width = `${percent}%`;
         if (progressText) progressText.textContent = `${percent}%`;
-        
+
         if (percent >= 100) {
             setTimeout(() => {
                 if (progressContainer) progressContainer.remove();
@@ -148,49 +182,66 @@ class UpdateManager {
 
     showUpdateReady(updateInfo) {
         const modalHtml = `
-            <div id="updateReadyModal" class="modal">
-                <div class="modal-content" style="max-width: 500px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-check-circle"></i> Update Ready</h3>
-                    </div>
-                    <div class="modal-body">
-                        <p>Version <strong>${updateInfo.version}</strong> has been downloaded and is ready to install.</p>
-                        <p class="warning-text">⚠️ Please save your work before restarting.</p>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="installLater" class="btn-secondary">Later</button>
-                        <button id="installNow" class="btn-primary">
-                            <i class="fas fa-rocket"></i> Restart & Install
-                        </button>
-                    </div>
+        <div id="updateReadyModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-check-circle"></i> Update Ready</h3>
+                </div>
+                <div class="modal-body">
+                    <p>Version <strong>${updateInfo.version || 'Unknown'}</strong> has been downloaded.</p>
+                    <p class="warning-text">⚠️ Windows may show security warning for unsigned app.</p>
+                    <p>Click "Download Manually" if auto-install fails.</p>
+                </div>
+                <div class="modal-actions">
+                    <button id="installLater" class="btn-secondary">Later</button>
+                    <button id="downloadManual" class="btn-secondary">
+                        <i class="fas fa-download"></i> Download Manually
+                    </button>
+                    <button id="installNow" class="btn-primary">
+                        <i class="fas fa-rocket"></i> Install Anyway
+                    </button>
                 </div>
             </div>
-        `;
+        </div>
+    `;
 
         this.showUpdateModal(modalHtml, 'updateReadyModal');
-        
+
         document.getElementById('installNow').addEventListener('click', async () => {
-            this.ui.showToast('Restarting to install update...', 'info');
+            this.ui.showToast('Installing update...', 'info');
             setTimeout(() => {
-                window.electronAPI.quitAndInstall();
+                window.electronAPI?.quitAndInstall?.();
             }, 1000);
         });
-        
+
+        document.getElementById('downloadManual').addEventListener('click', () => {
+            // Open download page in browser
+            window.open('https://github.com/Mathikumar1311/dashboard-smj-bricks/releases/latest', '_blank');
+            this.hideUpdateModal();
+        });
+
         document.getElementById('installLater').addEventListener('click', () => {
             this.hideUpdateModal();
-            this.ui.showToast('Update will be installed on next restart', 'info');
         });
     }
 
     showUpdateModal(html, modalId) {
         this.hideUpdateModal();
-        
+
         const modal = document.createElement('div');
         modal.id = modalId;
         modal.innerHTML = html;
         document.body.appendChild(modal);
-        
-        this.ui.showModal(modalId);
+
+        // Show modal
+        modal.style.display = 'flex';
+
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                this.hideUpdateModal();
+            }
+        });
     }
 
     hideUpdateModal() {
@@ -208,7 +259,7 @@ class UpdateManager {
     }
 
     cleanup() {
-        window.electronAPI.removeUpdateListeners();
+        this.hideUpdateUI();
     }
 }
 
@@ -226,7 +277,7 @@ class BusinessDashboard {
         }
         this.initializationPromise = this._initialize();
         return this.initializationPromise;
-        
+
     }
 
     async _initialize() {
@@ -255,10 +306,10 @@ class BusinessDashboard {
 
             // Finalize initialization
             await this.finalizeInitialization();
-            
+
             this.initializeUpdateManager();
             this.isInitialized = true;
-            
+
             console.log('✅ Business Dashboard initialized successfully');
         } catch (error) {
             console.error('❌ Application initialization failed:', error);
@@ -268,10 +319,16 @@ class BusinessDashboard {
     }
 
     initializeUpdateManager() {
-        this.updateManager = new UpdateManager(this.ui);
-        
-        // Add update check to menu or settings
-        this.addUpdateMenuOption();
+        // Only initialize if electronAPI is available
+        if (window.electronAPI) {
+            this.updateManager = new UpdateManager(this.ui);
+            this.addUpdateMenuOption();
+            console.log('Electron API methods:', Object.keys(window.electronAPI));
+            console.log('Electron API available:', !!window.electronAPI);
+        } else {
+            console.log('Running in browser mode - auto-update disabled');
+        }
+
     }
 
 
