@@ -123,16 +123,17 @@ function initializeAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
-  
+
   // Add this line to disable signature verification
-  autoUpdater.disableWebInstaller = true;
-  
+  autoUpdater.disableWebInstaller = false;
+  autoUpdater.forceDevUpdateConfig = !isDev ? false : true;
+
   // Rest of your existing auto-updater code...
   autoUpdater.on('checking-for-update', () => {
     console.log('🔍 Checking for updates...');
     mainWindow?.webContents.send('update-status', { status: 'checking' });
   });
-  
+
   autoUpdater.on('update-available', (info) => {
     console.log('🎉 Update available:', info.version);
     mainWindow?.webContents.send('update-available', {
@@ -141,14 +142,14 @@ function initializeAutoUpdater() {
       releaseNotes: info.releaseNotes
     });
   });
-  
+
   autoUpdater.on('update-not-available', (info) => {
     console.log('✅ App is up to date');
     mainWindow?.webContents.send('update-not-available', {
       version: info?.version || 'current'
     });
   });
-  
+
   autoUpdater.on('download-progress', (progressObj) => {
     console.log(`📥 Download progress: ${Math.round(progressObj.percent)}%`);
     mainWindow?.webContents.send('download-progress', {
@@ -158,7 +159,7 @@ function initializeAutoUpdater() {
       transferred: progressObj.transferred
     });
   });
-  
+
   autoUpdater.on('update-downloaded', (info) => {
     console.log('✅ Update downloaded, ready to install');
     mainWindow?.webContents.send('update-downloaded', {
@@ -166,7 +167,7 @@ function initializeAutoUpdater() {
       releaseDate: info.releaseDate
     });
   });
-  
+
   autoUpdater.on('error', (err) => {
     console.error('❌ Update error:', err);
     mainWindow?.webContents.send('update-error', {
@@ -174,7 +175,7 @@ function initializeAutoUpdater() {
       stack: err.stack
     });
   });
-  
+
   // Check for updates on startup (wait a bit for app to load)
   setTimeout(() => {
     if (!isDev) {
@@ -186,10 +187,10 @@ function initializeAutoUpdater() {
 app.whenReady().then(() => {
   // Create splash screen first
   createSplashWindow();
-  
+
   // Then create main window (it will be hidden initially)
   createMainWindow();
-  
+
   // Initialize auto-updater
   initializeAutoUpdater();
 });

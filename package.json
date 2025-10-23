@@ -81,7 +81,6 @@
       ],
       "icon": "assets/icon.ico",
       "publisherName": "Business Dashboard",
-      "sign": false,
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -89,8 +88,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Business Dashboard",
-      "perMachine": false
+      "shortcutName": "Business Dashboard"
     },
     "mac": {
       "target": [
