@@ -20,3 +20,4 @@ release-builds/
 *.deb
 *.rpm"node_modules/" 
 "dist/" 
+".env" 
