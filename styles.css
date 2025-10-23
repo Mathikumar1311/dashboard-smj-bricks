@@ -82,6 +82,274 @@ body {
     line-height: 1.6;
 }
 
+/* Splash Screen Container */
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #ff6b35, #e55a2b);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease;
+}
+
+.splash-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 500px;
+    padding: 2rem;
+    animation: fadeInUp 0.8s ease-out;
+}
+
+/* Logo Container */
+.logo-container {
+    margin-bottom: 2rem;
+    animation: pulse 2s infinite;
+}
+
+.logo-box {
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 
+        0 10px 30px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s ease;
+}
+
+.logo-box::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+        45deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    transform: rotate(45deg);
+    animation: shine 3s infinite;
+}
+
+.logo-icon {
+    font-size: 3.5rem;
+    color: #ff6b35;
+    z-index: 2;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+/* App Info */
+.app-info {
+    text-align: center;
+    margin-bottom: 3rem;
+    animation: fadeIn 1s ease 0.3s both;
+}
+
+.app-name {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    letter-spacing: 0.5px;
+}
+
+.app-tagline {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+}
+
+/* Loading Container */
+.loading-container {
+    width: 100%;
+    max-width: 300px;
+    text-align: center;
+    animation: fadeIn 1s ease 0.6s both;
+}
+
+.loading-spinner {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+}
+
+.spinner-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid white;
+    border-radius: 50%;
+    animation: spin 1.5s linear infinite;
+}
+
+.spinner-icon {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.8rem;
+    color: white;
+    animation: pulse 2s infinite;
+}
+
+.loading-text {
+    color: white;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+.loading-progress {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: white;
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.progress-text {
+    color: white;
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-width: 35px;
+}
+
+/* Version Info */
+.version-info {
+    position: absolute;
+    bottom: 2rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    animation: fadeIn 1s ease 0.9s both;
+}
+
+/* Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+@keyframes shine {
+    0% {
+        transform: rotate(45deg) translateX(-100%);
+    }
+    100% {
+        transform: rotate(45deg) translateX(100%);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    .splash-container {
+        padding: 1.5rem;
+    }
+    
+    .logo-box {
+        width: 100px;
+        height: 100px;
+        border-radius: 20px;
+    }
+    
+    .logo-icon {
+        font-size: 2.8rem;
+    }
+    
+    .app-name {
+        font-size: 2rem;
+    }
+    
+    .app-tagline {
+        font-size: 1rem;
+    }
+    
+    .loading-spinner {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .spinner-icon {
+        font-size: 1.5rem;
+    }
+    
+    .loading-text {
+        font-size: 1rem;
+    }
+}
+
 /* Login Section */
 .login-section {
     display: flex;

@@ -5,12 +5,37 @@ const { autoUpdater } = require('electron-updater');
 
 const isDev = process.env.NODE_ENV === 'development';
 let mainWindow;
+let splashWindow;
 
 // Paths for app data storage
 const userDataPath = app.getPath('userData');
 const dataFilePath = path.join(userDataPath, 'app-data.json');
 
-function createWindow() {
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 500,
+    height: 600,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    },
+    show: false,
+    icon: path.join(__dirname, 'assets', 'icon.png')
+  });
+
+  splashWindow.loadFile('splash.html');
+  splashWindow.once('ready-to-show', () => {
+    splashWindow.show();
+  });
+
+  return splashWindow;
+}
+
+function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -29,8 +54,14 @@ function createWindow() {
   mainWindow.loadFile('index.html');
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    if (isDev) mainWindow.webContents.openDevTools();
+    // Close splash screen and show main window after delay
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close();
+      }
+      mainWindow.show();
+      if (isDev) mainWindow.webContents.openDevTools();
+    }, 3000); // Show splash for 3 seconds
   });
 
   mainWindow.on('closed', () => {
@@ -149,7 +180,11 @@ function initializeAutoUpdater() {
 }
 
 app.whenReady().then(() => {
-  createWindow();
+  // Create splash screen first
+  createSplashWindow();
+  
+  // Then create main window (it will be hidden initially)
+  createMainWindow();
   
   // Initialize auto-updater
   initializeAutoUpdater();
@@ -160,7 +195,10 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createSplashWindow();
+    createMainWindow();
+  }
 });
 
 // Prevent external windows (security)
