@@ -1,0 +1,21 @@
+# Build outputs
+dist/
+build/
+*.exe
+*.blockmap
+*.yml
+*.yaml
+
+# Dependencies
+node_modules/
+.npm
+.package-lock.json
+
+# Electron specific
+app/dist/
+out/
+release-builds/
+*.app
+*.dmg
+*.deb
+*.rpm
