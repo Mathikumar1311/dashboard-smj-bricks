@@ -1,12 +1,7 @@
-// ==================================================
-// AuthManager (Merged) - supports DB + demo users,
-// UI integration, role checks, session persistence
-// ==================================================
-
 class AuthManager {
-    constructor({ db, ui }) {
+    constructor(db) {  // Change this line
         this.db = db;
-        this.ui = ui;
+        this.ui = null;
         this.currentUser = null;
         this.isAuthenticated = false;
         this.isInitialized = false;
@@ -43,13 +38,23 @@ class AuthManager {
                 phone: '9876543212',
                 status: 'active',
                 created_at: new Date().toISOString()
+            },
+            user: {
+                id: 'demo-user',
+                username: 'user',
+                password: 'user123',
+                role: 'user',
+                name: 'Regular User',
+                email: 'user@business.com',
+                phone: '9876543213',
+                status: 'active',
+                created_at: new Date().toISOString()
             }
         };
     }
-
-    // -------------------------
-    // Initialization
-    // -------------------------
+    setUI(ui) {
+        this.ui = ui;
+    }
     async initialize() {
         if (this.isInitialized) return;
         console.log('🔐 Initializing AuthManager...');
@@ -83,9 +88,6 @@ class AuthManager {
         }
     }
 
-    // -------------------------
-    // Login flow (attached to form)
-    // -------------------------
     async handleLogin(e) {
         if (e && e.preventDefault) e.preventDefault();
 
@@ -146,9 +148,6 @@ class AuthManager {
         }
     }
 
-    // -------------------------
-    // Authenticate (DB first, then demo)
-    // -------------------------
     async authenticateUser(username, password) {
         // 1) Try to use DB
         try {
@@ -174,18 +173,18 @@ class AuthManager {
         }
 
         // 2) Fallback demo users
-        const demo = this._demoUsers[username];
-        if (demo && demo.password === password) {
-            const { password: _, ...safeUser } = demo;
+        const demoUser = Object.values(this._demoUsers).find(demo => 
+            demo.username === username && demo.password === password
+        );
+        
+        if (demoUser) {
+            const { password: _, ...safeUser } = demoUser;
             return safeUser;
         }
 
         return null;
     }
 
-    // -------------------------
-    // Session persistence & sync
-    // -------------------------
     async loadCurrentUser() {
         try {
             const raw = localStorage.getItem('currentUser');
@@ -278,9 +277,6 @@ class AuthManager {
         }
     }
 
-    // -------------------------
-    // Logout
-    // -------------------------
     async handleLogout() {
         // Confirm for UX (optional)
         if (!confirm('Are you sure you want to logout?')) return;
@@ -295,9 +291,6 @@ class AuthManager {
         this.showToast('Logged out successfully', 'info');
     }
 
-    // -------------------------
-    // Accessors & permissions
-    // -------------------------
     getCurrentUser() {
         return this.currentUser;
     }
@@ -334,9 +327,6 @@ class AuthManager {
         return allowed.includes(this.currentUser.role);
     }
 
-    // -------------------------
-    // User CRUD helpers (admin)
-    // -------------------------
     async createUser(userData) {
         if (!this.hasPermission('admin')) throw new Error('Insufficient permissions to create users');
         if (!userData || !userData.name || !userData.role) throw new Error('Name and role are required');
@@ -368,9 +358,6 @@ class AuthManager {
         return await this.db.delete('users', userId);
     }
 
-    // -------------------------
-    // UI Integration helpers
-    // -------------------------
     showDashboard() {
         // Hide login, show dashboard section (SPA style)
         document.getElementById('loginSection')?.classList.add('hidden');
@@ -435,7 +422,6 @@ class AuthManager {
     }
 
     togglePasswordVisibility(toggleButtonOrElement) {
-        // Accept either the button DOM node or the click event
         let btn = toggleButtonOrElement;
         if (toggleButtonOrElement && toggleButtonOrElement.target) {
             btn = toggleButtonOrElement.target.closest('.password-toggle');
@@ -459,9 +445,6 @@ class AuthManager {
         btn.title = isPassword ? 'Hide password' : 'Show password';
     }
 
-    // -------------------------
-    // Helpers: loading & toasts
-    // -------------------------
     showLoading(msg = 'Loading...') {
         if (this.ui && typeof this.ui.showLoading === 'function') {
             this.ui.showLoading(msg);
@@ -507,7 +490,21 @@ class AuthManager {
             toast.style.transform = 'translateX(200px)';
         }, 2800);
     }
+
+    cleanup() {
+        // Cleanup event listeners
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm && loginForm._authListenerAttached) {
+            loginForm.removeEventListener('submit', this.handleLogin);
+            loginForm._authListenerAttached = false;
+        }
+
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn && logoutBtn._authListenerAttached) {
+            logoutBtn.removeEventListener('click', this.handleLogout);
+            logoutBtn._authListenerAttached = false;
+        }
+    }
 }
 
-// Expose globally
 window.AuthManager = AuthManager;

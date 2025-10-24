@@ -9,17 +9,17 @@ class UIManager {
 
     async initialize() {
         console.log('🎨 Initializing UI components...');
-        
+
         try {
             // Wait for DOM to be ready
             if (document.readyState === 'loading') {
                 await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
             }
-            
+
             this.setupEventListeners();
             this.setupModals();
             this.initializeFromSavedState();
-            
+
             console.log('✅ UI components initialized');
             return true;
         } catch (error) {
@@ -30,7 +30,7 @@ class UIManager {
 
     setupEventListeners() {
         console.log('🔗 Setting up UI event listeners...');
-        
+
         // Sidebar toggle
         const sidebarToggle = document.getElementById('sidebarToggle');
         if (sidebarToggle) {
@@ -86,7 +86,7 @@ class UIManager {
     // Role-based access control
     setupRoleBasedAccess(userRole) {
         console.log(`🔐 Setting up UI for role: ${userRole}`);
-        
+
         const rolePermissions = {
             'admin': ['dashboard', 'users', 'employees', 'salary', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
             'manager': ['dashboard', 'employees', 'salary', 'reports', 'settings'],
@@ -94,12 +94,12 @@ class UIManager {
         };
 
         const allowedSections = rolePermissions[userRole] || ['dashboard', 'settings'];
-        
+
         // Hide unauthorized sections
         document.querySelectorAll('.nav-link').forEach(link => {
             const section = link.getAttribute('data-section');
             const parentLi = link.closest('li');
-            
+
             if (!allowedSections.includes(section)) {
                 parentLi.style.display = 'none';
             } else {
@@ -119,7 +119,7 @@ class UIManager {
         const userRole = document.getElementById('userRole');
         const userAvatar = document.getElementById('userAvatar');
         const settingsAvatar = document.getElementById('settingsAvatar');
-        
+
         if (userName) userName.textContent = currentUser.name;
         if (userRole) userRole.textContent = currentUser.role;
 
@@ -154,7 +154,7 @@ class UIManager {
 
     showSection(sectionName) {
         console.log(`📂 Showing section: ${sectionName}`);
-        
+
         // Hide all content sections
         document.querySelectorAll('.content-section').forEach(section => {
             section.classList.remove('active');
@@ -188,60 +188,40 @@ class UIManager {
         history.pushState({ section: sectionName }, '', `#${sectionName}`);
     }
 
-    // FIXED: Modal methods that work with modal IDs
+    // FIXED: Simple and reliable modal methods
     showModal(modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
-            
-            // Create backdrop if needed
-            if (!modal.querySelector('.modal-backdrop')) {
-                const backdrop = document.createElement('div');
-                backdrop.className = 'modal-backdrop';
-                backdrop.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: rgba(0,0,0,0.5);
-                    z-index: 999;
-                `;
-                backdrop.addEventListener('click', () => this.hideModal(modalId));
-                modal.appendChild(backdrop);
-            }
-            
-            // Focus first input
-            const firstInput = modal.querySelector('input, select, textarea');
-            if (firstInput) {
-                setTimeout(() => firstInput.focus(), 100);
-            }
+            console.log('✅ Modal shown:', modalId);
+
+            // Debug: Log modal state
+            setTimeout(() => {
+                const closeBtn = modal.querySelector('.modal-close');
+                const cancelBtn = modal.querySelector('.modal-cancel');
+                console.log('🔍 Modal state:', {
+                    modalId: modalId,
+                    hidden: modal.classList.contains('hidden'),
+                    closeBtn: closeBtn ? 'EXISTS' : 'MISSING',
+                    cancelBtn: cancelBtn ? 'EXISTS' : 'MISSING'
+                });
+            }, 50);
         }
     }
 
-    // FIXED: Proper hideModal method
     hideModal(modalId) {
         let modal;
         if (typeof modalId === 'string') {
             modal = document.getElementById(modalId);
         } else {
-            modal = modalId; // Support passing element directly
+            modal = modalId;
         }
-        
+
         if (modal) {
             modal.classList.add('hidden');
             document.body.style.overflow = '';
-            
-            // Remove backdrop
-            const backdrop = modal.querySelector('.modal-backdrop');
-            if (backdrop) {
-                backdrop.remove();
-            }
-            
-            // Reset form if exists
-            const form = modal.querySelector('form');
-            if (form) form.reset();
+            console.log('✅ Modal hidden:', modal.id || modalId);
         }
     }
 
@@ -285,7 +265,7 @@ class UIManager {
 
         const colors = {
             success: '#28a745',
-            error: '#dc3545', 
+            error: '#dc3545',
             warning: '#ffc107',
             info: '#17a2b8'
         };
@@ -343,13 +323,13 @@ class UIManager {
     showButtonLoading(button, text = 'Loading...') {
         const originalHTML = button.innerHTML;
         const originalText = button.textContent;
-        
+
         button.disabled = true;
         button.innerHTML = `
             <i class="fas fa-spinner fa-spin"></i>
             ${text}
         `;
-        
+
         return () => {
             button.disabled = false;
             button.innerHTML = originalHTML;
@@ -387,7 +367,7 @@ class UIManager {
             section.style.position = 'relative';
             section.appendChild(loader);
         }
-        
+
         loader.style.display = 'flex';
         return loader;
     }
@@ -413,7 +393,7 @@ class UIManager {
                 topbarRight.appendChild(statusElement);
             }
         }
-        
+
         statusElement.className = `db-status ${connected ? 'connected' : 'disconnected'}`;
         statusElement.innerHTML = connected ?
             '<i class="fas fa-database"></i> Online' :
@@ -506,7 +486,7 @@ class UIManager {
         document.querySelectorAll('.section-loader').forEach(loader => {
             loader.remove();
         });
-        
+
         const toastContainer = document.getElementById('toast-container');
         if (toastContainer) {
             toastContainer.remove();

@@ -4,6 +4,7 @@ class ReportsManager {
         this.ui = dependencies.ui;
         this.auth = dependencies.auth;
         this.currentReportData = [];
+        this.exportManager = dependencies.exportManager;
     }
 
     async initialize() {
@@ -12,7 +13,9 @@ class ReportsManager {
     }
 
     setupEventListeners() {
-        document.addEventListener('DOMContentLoaded', () => {
+        console.log('📊 Setting up reports event listeners...');
+        
+        setTimeout(() => {
             // Report generation
             const generateReportBtn = document.getElementById('generateReport');
             if (generateReportBtn) {
@@ -25,20 +28,68 @@ class ReportsManager {
             const backupData = document.getElementById('backupData');
             
             if (exportExcel) {
-                exportExcel.addEventListener('click', () => this.exportToExcel());
+                exportExcel.addEventListener('click', () => this.showExportOptions('excel'));
             }
             
             if (exportPdf) {
-                exportPdf.addEventListener('click', () => this.exportToPDF());
+                exportPdf.addEventListener('click', () => this.showExportOptions('pdf'));
             }
 
             if (backupData) {
-                backupData.addEventListener('click', () => this.backupAllData());
+                backupData.addEventListener('click', () => this.showBackupOptions());
             }
+
+            // Quick export buttons from other sections
+            this.setupQuickExportListeners();
 
             // Set default dates
             this.setDefaultDates();
-        });
+
+        }, 100);
+    }
+
+    setupQuickExportListeners() {
+        // Users export
+        const exportUsersBtn = document.getElementById('exportUsersBtn');
+        if (exportUsersBtn) {
+            exportUsersBtn.addEventListener('click', () => this.quickExportUsers());
+        }
+
+        // Employees export
+        const exportEmployeesBtn = document.getElementById('exportEmployeesBtn');
+        if (exportEmployeesBtn) {
+            exportEmployeesBtn.addEventListener('click', () => this.quickExportEmployees());
+        }
+
+        // Customers export
+        const exportCustomersBtn = document.getElementById('exportCustomersBtn');
+        if (exportCustomersBtn) {
+            exportCustomersBtn.addEventListener('click', () => this.quickExportCustomers());
+        }
+
+        // Bills export
+        const exportBillsBtn = document.getElementById('exportBillsBtn');
+        if (exportBillsBtn) {
+            exportBillsBtn.addEventListener('click', () => this.quickExportBills());
+        }
+
+        // Payments export
+        const exportPaymentsBtn = document.getElementById('exportPaymentsBtn');
+        if (exportPaymentsBtn) {
+            exportPaymentsBtn.addEventListener('click', () => this.quickExportPayments());
+        }
+
+        // Salary export
+        const exportSalaryBtn = document.getElementById('exportSalaryBtn');
+        if (exportSalaryBtn) {
+            exportSalaryBtn.addEventListener('click', () => this.quickExportSalary());
+        }
+
+        // Pending bills export
+        const exportPendingBtn = document.getElementById('exportPendingBtn');
+        if (exportPendingBtn) {
+            exportPendingBtn.addEventListener('click', () => this.quickExportPending());
+        }
     }
 
     setDefaultDates() {
@@ -206,6 +257,164 @@ class ReportsManager {
         }
     }
 
+    // Export Options Modal
+    showExportOptions(type = 'excel') {
+        const titles = {
+            'excel': 'Excel',
+            'pdf': 'PDF'
+        };
+
+        const exportHtml = `
+            <div id="exportReportModal" class="modal">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-download"></i> Export Report</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="export-preview">
+                        <h4>Preview</h4>
+                        <div class="preview-content">
+                            ${this.generateExportPreview()}
+                        </div>
+                    </div>
+                    
+                    <div class="export-options">
+                        <div class="export-option ${type === 'excel' ? 'selected' : ''}" onclick="app.getManagers().reports.exportToExcel()">
+                            <div class="export-icon excel">
+                                <i class="fas fa-file-excel"></i>
+                            </div>
+                            <div class="export-info">
+                                <h4>Export to Excel</h4>
+                                <p>Download as .xlsx file for data analysis</p>
+                            </div>
+                            <div class="export-arrow">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="export-option ${type === 'pdf' ? 'selected' : ''}" onclick="app.getManagers().reports.exportToPDF()">
+                            <div class="export-icon pdf">
+                                <i class="fas fa-file-pdf"></i>
+                            </div>
+                            <div class="export-info">
+                                <h4>Export to PDF</h4>
+                                <p>Download as .pdf file for reporting</p>
+                            </div>
+                            <div class="export-arrow">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn-secondary" onclick="app.getManagers().reports.closeExportModal()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(exportHtml, 'exportReportModal');
+    }
+
+    generateExportPreview() {
+        if (this.currentReportData.length === 0) {
+            return '<p class="no-data">No data available for export</p>';
+        }
+
+        const previewData = this.currentReportData.slice(0, 5); // Show first 5 rows
+        const totalAmount = this.currentReportData.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
+        const totalGST = this.currentReportData.reduce((sum, bill) => sum + (bill.gst_amount || 0), 0);
+
+        return `
+            <div class="preview-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Bill No</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${previewData.map(bill => `
+                            <tr>
+                                <td>${Utils.formatDate(bill.bill_date)}</td>
+                                <td>${bill.bill_number}</td>
+                                <td>${bill.customer_name}</td>
+                                <td>${Utils.formatCurrency(bill.total_amount)}</td>
+                                <td><span class="status-${bill.status}">${bill.status}</span></td>
+                            </tr>
+                        `).join('')}
+                        ${this.currentReportData.length > 5 ? `
+                            <tr>
+                                <td colspan="3" style="text-align: center; font-style: italic;">
+                                    ... and ${this.currentReportData.length - 5} more records
+                                </td>
+                                <td colspan="2"></td>
+                            </tr>
+                        ` : ''}
+                    </tbody>
+                </table>
+            </div>
+            <div class="preview-summary">
+                <div class="summary-item">
+                    <span>Total Records:</span>
+                    <strong>${this.currentReportData.length}</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total Amount:</span>
+                    <strong>${Utils.formatCurrency(totalAmount)}</strong>
+                </div>
+                <div class="summary-item">
+                    <span>Total GST:</span>
+                    <strong>${Utils.formatCurrency(totalGST)}</strong>
+                </div>
+            </div>
+        `;
+    }
+
+    showCustomModal(html, modalId) {
+        // Remove existing modal
+        const existingModal = document.getElementById(modalId);
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Create new modal
+        const modal = document.createElement('div');
+        modal.id = modalId;
+        modal.innerHTML = html;
+        document.body.appendChild(modal);
+
+        // Show modal
+        modal.style.display = 'flex';
+
+        // Add close handlers
+        const closeBtn = modal.querySelector('.modal-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                modal.remove();
+            });
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+
+        return modal;
+    }
+
+    closeExportModal() {
+        this.ui.hideModal('exportReportModal');
+    }
+
     async exportToExcel() {
         try {
             if (this.currentReportData.length === 0) {
@@ -213,13 +422,18 @@ class ReportsManager {
                 return;
             }
 
+            this.closeExportModal();
             this.ui.showExportProgress('Exporting to Excel...');
+
+            const startDate = document.getElementById('reportStartDate')?.value;
+            const endDate = document.getElementById('reportEndDate')?.value;
+            const title = `Sales Report (${Utils.formatDate(startDate)} to ${Utils.formatDate(endDate)})`;
 
             const exportData = this.currentReportData.map(bill => ({
                 'Date': Utils.formatDate(bill.bill_date),
                 'Bill Number': bill.bill_number,
                 'Customer Name': bill.customer_name,
-                'Customer Phone': bill.customer_phone,
+                'Customer Phone': bill.customer_phone || '',
                 'Sub Total': bill.sub_total,
                 'GST Rate': `${bill.gst_rate}%`,
                 'GST Amount': bill.gst_amount,
@@ -227,8 +441,10 @@ class ReportsManager {
                 'Status': bill.status
             }));
 
-            if (window.exportManager) {
-                await window.exportManager.exportToExcel(exportData, 'sales_report', 'Sales Report');
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'sales_report', title);
+            } else if (window.exportManager) {
+                await window.exportManager.exportToExcel(exportData, 'sales_report', title);
             } else {
                 Utils.exportToExcel(exportData, 'sales_report');
             }
@@ -249,6 +465,7 @@ class ReportsManager {
                 return;
             }
 
+            this.closeExportModal();
             this.ui.showExportProgress('Exporting to PDF...');
 
             const startDate = document.getElementById('reportStartDate')?.value;
@@ -264,7 +481,9 @@ class ReportsManager {
                 'Status': bill.status
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToPDF(exportData, 'sales_report', title);
+            } else if (window.exportManager) {
                 await window.exportManager.exportToPDF(exportData, 'sales_report', title);
             } else {
                 await Utils.exportToPDF(exportData, 'sales_report', title);
@@ -279,34 +498,91 @@ class ReportsManager {
         }
     }
 
+    // Backup Options Modal
+    showBackupOptions() {
+        const backupHtml = `
+            <div id="backupModal" class="modal">
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-database"></i> Data Backup</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="backup-options">
+                        <div class="backup-option" onclick="app.getManagers().reports.backupAllData()">
+                            <div class="backup-icon full">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="backup-info">
+                                <h4>Full Backup</h4>
+                                <p>Backup all data including users, employees, bills, and customers</p>
+                            </div>
+                            <div class="backup-arrow">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="backup-option" onclick="app.getManagers().reports.backupBusinessData()">
+                            <div class="backup-icon business">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div class="backup-info">
+                                <h4>Business Data Only</h4>
+                                <p>Backup only business data (bills, customers, payments)</p>
+                            </div>
+                            <div class="backup-arrow">
+                                <i class="fas fa-chevron-right"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="backup-info-section">
+                        <h4>Backup Information</h4>
+                        <ul>
+                            <li>Backups include all your business data</li>
+                            <li>Data is exported as JSON format</li>
+                            <li>You can restore data from backups</li>
+                            <li>Backups are saved with timestamp</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button class="btn-secondary" onclick="app.getManagers().reports.closeBackupModal()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(backupHtml, 'backupModal');
+    }
+
+    closeBackupModal() {
+        this.ui.hideModal('backupModal');
+    }
+
     async backupAllData() {
         try {
-            this.ui.showExportProgress('Creating backup...');
+            this.closeBackupModal();
+            this.ui.showExportProgress('Creating full backup...');
 
-            const allData = await this.db.exportAllData();
-            
-            if (window.electronAPI) {
-                const result = await window.electronAPI.exportAllData(allData);
-                if (result.success) {
-                    this.ui.showToast(`Backup created successfully: ${result.filePath}`, 'success');
-                } else {
-                    throw new Error(result.error);
+            const allData = {
+                timestamp: new Date().toISOString(),
+                version: '2.1.0',
+                data: {
+                    users: await this.db.getUsers(),
+                    employees: await this.db.getEmployees(),
+                    customers: await this.db.getCustomers(),
+                    bills: await this.db.getBills(),
+                    payments: await this.db.getPayments(),
+                    salaryRecords: await this.db.getSalaryRecords()
                 }
-            } else {
-                // Browser fallback - download as JSON
-                const dataStr = JSON.stringify(allData, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `business_backup_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                
-                this.ui.showToast('Backup downloaded successfully', 'success');
-            }
+            };
+
+            await this.downloadBackup(allData, 'full_backup');
+            this.ui.showToast('Full backup created successfully', 'success');
+            
         } catch (error) {
             console.error('Error creating backup:', error);
             this.ui.showToast('Error creating backup: ' + error.message, 'error');
@@ -315,104 +591,48 @@ class ReportsManager {
         }
     }
 
-    // Advanced reporting methods
-    async generateSalesTrend() {
+    async backupBusinessData() {
         try {
-            const bills = await this.db.getBills();
-            const monthlySales = {};
+            this.closeBackupModal();
+            this.ui.showExportProgress('Creating business data backup...');
 
-            bills.forEach(bill => {
-                const date = new Date(bill.bill_date);
-                const monthYear = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-                
-                if (!monthlySales[monthYear]) {
-                    monthlySales[monthYear] = 0;
+            const businessData = {
+                timestamp: new Date().toISOString(),
+                version: '2.1.0',
+                data: {
+                    customers: await this.db.getCustomers(),
+                    bills: await this.db.getBills(),
+                    payments: await this.db.getPayments()
                 }
-                monthlySales[monthYear] += bill.total_amount;
-            });
+            };
 
-            return Object.entries(monthlySales)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([month, sales]) => ({ month, sales }));
+            await this.downloadBackup(businessData, 'business_backup');
+            this.ui.showToast('Business data backup created successfully', 'success');
+            
         } catch (error) {
-            console.error('Error generating sales trend:', error);
-            return [];
+            console.error('Error creating business backup:', error);
+            this.ui.showToast('Error creating business backup: ' + error.message, 'error');
+        } finally {
+            this.ui.hideExportProgress();
         }
     }
 
-    async generateCustomerReport() {
-        try {
-            const bills = await this.db.getBills();
-            const customerStats = {};
-
-            bills.forEach(bill => {
-                const customerName = bill.customer_name;
-                if (!customerStats[customerName]) {
-                    customerStats[customerName] = {
-                        totalAmount: 0,
-                        billCount: 0,
-                        lastPurchase: bill.bill_date
-                    };
-                }
-                
-                customerStats[customerName].totalAmount += bill.total_amount;
-                customerStats[customerName].billCount += 1;
-                
-                if (new Date(bill.bill_date) > new Date(customerStats[customerName].lastPurchase)) {
-                    customerStats[customerName].lastPurchase = bill.bill_date;
-                }
-            });
-
-            return Object.entries(customerStats)
-                .map(([name, stats]) => ({
-                    customer: name,
-                    totalSpent: stats.totalAmount,
-                    billCount: stats.billCount,
-                    lastPurchase: stats.lastPurchase,
-                    averageSpent: stats.totalAmount / stats.billCount
-                }))
-                .sort((a, b) => b.totalSpent - a.totalSpent);
-        } catch (error) {
-            console.error('Error generating customer report:', error);
-            return [];
-        }
+    async downloadBackup(data, backupType) {
+        const dataStr = JSON.stringify(data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const timestamp = new Date().toISOString().split('T')[0];
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${backupType}_${timestamp}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     }
 
-    async generateGSTReport() {
-        try {
-            const bills = await this.db.getBills();
-            const gstStats = {};
-
-            bills.forEach(bill => {
-                const gstRate = bill.gst_rate;
-                if (!gstStats[gstRate]) {
-                    gstStats[gstRate] = {
-                        totalGST: 0,
-                        totalSales: 0,
-                        billCount: 0
-                    };
-                }
-                
-                gstStats[gstRate].totalGST += bill.gst_amount;
-                gstStats[gstRate].totalSales += bill.total_amount;
-                gstStats[gstRate].billCount += 1;
-            });
-
-            return Object.entries(gstStats)
-                .map(([rate, stats]) => ({
-                    gstRate: `${rate}%`,
-                    totalGST: stats.totalGST,
-                    totalSales: stats.totalSales,
-                    billCount: stats.billCount
-                }))
-                .sort((a, b) => parseFloat(a.gstRate) - parseFloat(b.gstRate));
-        } catch (error) {
-            console.error('Error generating GST report:', error);
-            return [];
-        }
-    }
-
-    // Quick export methods for other sections
+    // Quick export methods
     async quickExportUsers() {
         try {
             this.ui.showExportProgress('Exporting users...');
@@ -426,7 +646,9 @@ class ReportsManager {
                 'Created Date': Utils.formatDate(user.created_at)
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'users_export', 'Users Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'users_export', 'Users Export');
             } else {
                 Utils.exportToExcel(exportData, 'users_export');
@@ -446,14 +668,19 @@ class ReportsManager {
             this.ui.showExportProgress('Exporting employees...');
             const employees = await this.db.getEmployees();
             const exportData = employees.map(emp => ({
+                'Employee ID': emp.employee_id || 'N/A',
                 'Name': emp.name,
                 'Phone': emp.phone || '',
+                'Email': emp.email || '',
                 'Role': emp.role,
-                'Salary': emp.salary,
+                'Type': emp.type || 'employee',
+                'Vehicle Number': emp.vehicle_number || 'N/A',
                 'Join Date': Utils.formatDate(emp.join_date)
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'employees_export', 'Employees Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'employees_export', 'Employees Export');
             } else {
                 Utils.exportToExcel(exportData, 'employees_export');
@@ -476,10 +703,14 @@ class ReportsManager {
                 'Name': customer.name,
                 'Phone': customer.phone,
                 'Email': customer.email || '',
-                'Address': customer.address || ''
+                'Address': customer.address || '',
+                'Total Bills': customer.total_bills || 0,
+                'Total Amount': customer.total_amount || 0
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'customers_export', 'Customers Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'customers_export', 'Customers Export');
             } else {
                 Utils.exportToExcel(exportData, 'customers_export');
@@ -502,12 +733,15 @@ class ReportsManager {
                 'Bill Number': bill.bill_number,
                 'Customer': bill.customer_name,
                 'Date': Utils.formatDate(bill.bill_date),
-                'Amount': bill.total_amount,
-                'GST': bill.gst_amount,
+                'Sub Total': bill.sub_total,
+                'GST Amount': bill.gst_amount,
+                'Total Amount': bill.total_amount,
                 'Status': bill.status
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'bills_export', 'Bills Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'bills_export', 'Bills Export');
             } else {
                 Utils.exportToExcel(exportData, 'bills_export');
@@ -535,7 +769,9 @@ class ReportsManager {
                 'Method': payment.payment_method
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'payments_export', 'Payments Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'payments_export', 'Payments Export');
             } else {
                 Utils.exportToExcel(exportData, 'payments_export');
@@ -557,11 +793,16 @@ class ReportsManager {
             const exportData = salaryRecords.map(record => ({
                 'Employee': record.employee_name,
                 'Date': Utils.formatDate(record.record_date),
-                'Amount': record.amount,
-                'Work Hours': record.work_hours
+                'Base Salary': record.base_salary,
+                'Incentive': record.incentive_amount,
+                'Advance': record.advance_amount,
+                'Total Amount': record.total_amount,
+                'Status': record.status
             }));
 
-            if (window.exportManager) {
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'salary_export', 'Salary Records Export');
+            } else if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'salary_export', 'Salary Records Export');
             } else {
                 Utils.exportToExcel(exportData, 'salary_export');
@@ -575,7 +816,36 @@ class ReportsManager {
             this.ui.hideExportProgress();
         }
     }
+
+    async quickExportPending() {
+        try {
+            this.ui.showExportProgress('Exporting pending bills...');
+            const bills = await this.db.getBills();
+            const pendingBills = bills.filter(bill => bill.status === 'pending');
+            const exportData = pendingBills.map(bill => ({
+                'Bill Number': bill.bill_number,
+                'Customer': bill.customer_name,
+                'Amount': bill.total_amount,
+                'Date': Utils.formatDate(bill.bill_date),
+                'Due Date': Utils.formatDate(bill.bill_date)
+            }));
+
+            if (this.exportManager) {
+                await this.exportManager.exportToExcel(exportData, 'pending_bills_export', 'Pending Bills Export');
+            } else if (window.exportManager) {
+                await window.exportManager.exportToExcel(exportData, 'pending_bills_export', 'Pending Bills Export');
+            } else {
+                Utils.exportToExcel(exportData, 'pending_bills_export');
+            }
+            
+            this.ui.showToast('Pending bills exported successfully', 'success');
+        } catch (error) {
+            console.error('Error exporting pending bills:', error);
+            this.ui.showToast('Error exporting pending bills', 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
 }
 
-// Make ReportsManager available globally
 window.ReportsManager = ReportsManager;

@@ -1,6 +1,6 @@
 {
   "name": "business-dashboard",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Business Management Dashboard with Supabase Integration",
   "main": "main.js",
   "homepage": "./",
@@ -41,11 +41,14 @@
     "appId": "com.business.dashboard",
     "productName": "Business Dashboard",
     "copyright": "Copyright © 2024",
-    "publish": {
-      "provider": "github",
-      "owner": "Mathikumar1311",
-      "repo": "dashboard-smj-bricks"
-    },
+  "publish": [
+  {
+    "provider": "github",
+    "owner": "Mathikumar1311",
+    "repo": "dashboard-smj-bricks"
+  }
+],
+
     "directories": {
       "output": "dist",
       "buildResources": "assets"

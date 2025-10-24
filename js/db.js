@@ -1,33 +1,46 @@
 class DatabaseManager {
     constructor() {
+        // 🔐 CHANGE TO SERVICE ROLE KEY (get from Supabase Settings > API)
         this.supabaseUrl = 'https://fhdyvidwiibvhkgfqkbk.supabase.co';
-        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoZHl2aWR3aWlidmhrZ2Zxa2JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjYxMjAsImV4cCI6MjA3NTk0MjEyMH0.q2TH4O43WaUGJWfQ9yHskPALjfAdECUQcGOl1AHktUQ';
+        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoZHl2aWR3aWlidmhrZ2Zxa2JrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjYxMjAsImV4cCI6MjA3NTk0MjEyMH0.q2TH4O43WaUGJWfQ9yHskPALjfAdECUQcGOl1AHktUQ'; // SERVICE ROLE KEY
+
         this.supabase = null;
         this.isOnline = false;
         this.localCache = new Map();
         this.pendingOperations = [];
         this.missingTables = new Set();
-        
+
         this.TABLES = {
             USERS: 'users',
             EMPLOYEES: 'employees',
             CUSTOMERS: 'customers',
             BILLS: 'bills',
             PAYMENTS: 'payments',
-            SALARY_RECORDS: 'salary_records'
+            SALARY_RECORDS: 'salary_records',
+            YEARLY_ALLOCATIONS: 'yearly_allocations', // NEW TABLE
+            ADVANCE_PAYMENTS: 'advance_payments'      // NEW TABLE
         };
     }
 
     async initialize() {
         console.log('🗄️ Initializing database manager...');
+        console.log('🔑 Supabase URL:', this.supabaseUrl);
+        console.log('🔑 Supabase Key exists:', !!this.supabaseKey);
 
         try {
             await this.initializeSupabase();
             this.isOnline = true;
             console.log('✅ Database: Supabase connected');
+            console.log('🔍 Checking table existence...');
             await this.checkTableExistence();
+
+            // DEBUG: Test connection with actual data
+            console.log('🧪 Testing data fetch...');
+            const testData = await this.getEmployees();
+            console.log('📊 Test employees fetch:', testData);
+
         } catch (error) {
-            console.warn('⚠️ Database: Supabase failed, using local storage');
+            console.warn('⚠️ Database: Supabase failed, using local storage', error);
             this.initializeLocalStorage();
             this.isOnline = false;
         }
@@ -42,8 +55,8 @@ class DatabaseManager {
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
             document.head.appendChild(script);
-            await new Promise((resolve) => { 
-                script.onload = resolve; 
+            await new Promise((resolve, reject) => {
+                script.onload = resolve;
                 script.onerror = () => reject(new Error('Failed to load Supabase'));
             });
         }
@@ -93,9 +106,9 @@ class DatabaseManager {
         const operation = async () => {
             if (this.isOnline && !this.missingTables.has(table)) {
                 const sanitizedData = this.sanitizeDataForTable(table, data);
-                
+
                 console.log(`📝 Creating ${table}:`, sanitizedData);
-                
+
                 const { data: result, error } = await this.supabase
                     .from(table)
                     .insert([sanitizedData])
@@ -122,7 +135,7 @@ class DatabaseManager {
 
     sanitizeDataForTable(table, data) {
         const sanitized = { ...data };
-        
+
         // Remove any undefined or null values
         Object.keys(sanitized).forEach(key => {
             if (sanitized[key] === undefined || sanitized[key] === null) {
@@ -137,7 +150,7 @@ class DatabaseManager {
                     if (!userFields.includes(key)) delete sanitized[key];
                 });
                 break;
-                
+
             case 'employees':
                 // FIXED: Accept custom string IDs for employees
                 const employeeFields = ['id', 'name', 'phone', 'email', 'employee_type', 'vehicle_number', 'role', 'salary', 'join_date', 'created_at', 'updated_at'];
@@ -145,14 +158,14 @@ class DatabaseManager {
                     if (!employeeFields.includes(key)) delete sanitized[key];
                 });
                 break;
-                
+
             case 'customers':
                 const customerFields = ['id', 'name', 'phone', 'email', 'address', 'total_bills', 'total_amount', 'created_at', 'updated_at'];
                 Object.keys(sanitized).forEach(key => {
                     if (!customerFields.includes(key)) delete sanitized[key];
                 });
                 break;
-                
+
             case 'bills':
                 const billFields = ['id', 'bill_number', 'bill_date', 'customer_id', 'customer_name', 'customer_phone', 'customer_email', 'customer_address', 'items', 'sub_total', 'gst_rate', 'gst_amount', 'total_amount', 'status', 'created_at', 'updated_at'];
                 Object.keys(sanitized).forEach(key => {
@@ -168,13 +181,28 @@ class DatabaseManager {
                 break;
 
             case 'salary_records':
-                const salaryFields = ['id', 'employee_id', 'employee_name', 'record_date', 'amount', 'work_hours', 'created_at'];
+                const salaryFields = ['id', 'employee_id', 'employee_name', 'record_date', 'amount', 'incentive_amount', 'work_hours', 'created_at'];
                 Object.keys(sanitized).forEach(key => {
                     if (!salaryFields.includes(key)) delete sanitized[key];
                 });
                 break;
+
+            // NEW TABLES: Yearly Allocations and Advance Payments
+            case 'yearly_allocations':
+                const allocationFields = ['id', 'employee_id', 'year', 'allocated_amount', 'salary_type', 'notes', 'created_at', 'updated_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!allocationFields.includes(key)) delete sanitized[key];
+                });
+                break;
+
+            case 'advance_payments':
+                const advanceFields = ['id', 'employee_id', 'amount', 'allocation_used', 'payment_date', 'week_number', 'month_number', 'year', 'confirmed', 'notes', 'created_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!advanceFields.includes(key)) delete sanitized[key];
+                });
+                break;
         }
-        
+
         return sanitized;
     }
 
@@ -183,12 +211,15 @@ class DatabaseManager {
             throw new Error(`Invalid table name: ${table}`);
         }
 
+        // If we know the table is missing, use local storage
         if (this.isOnline && this.missingTables.has(table)) {
             return this.readLocal(table, query);
         }
 
         const operation = async () => {
             if (this.isOnline) {
+                console.log(`🔍 Fetching data from ${table}...`);
+
                 let supabaseQuery = this.supabase.from(table).select('*');
 
                 if (query.where) {
@@ -211,12 +242,18 @@ class DatabaseManager {
 
                 const { data, error } = await supabaseQuery;
 
-                if (error && (error.code === 'PGRST116' || error.message.includes('does not exist'))) {
-                    this.missingTables.add(table);
-                    return this.readLocal(table, query);
+                console.log(`📊 ${table} query result:`, { data, error });
+
+                if (error) {
+                    console.error(`❌ Supabase read error for ${table}:`, error);
+                    if (error.code === 'PGRST116' || error.message.includes('does not exist')) {
+                        this.missingTables.add(table);
+                        return this.readLocal(table, query);
+                    }
+                    throw error;
                 }
 
-                if (error) throw error;
+                // ✅ FIX: Return data even if it's empty array
                 return data || [];
             } else {
                 return this.readLocal(table, query);
@@ -234,7 +271,7 @@ class DatabaseManager {
         const operation = async () => {
             if (this.isOnline && !this.missingTables.has(table)) {
                 const sanitizedData = this.sanitizeDataForTable(table, data);
-                
+
                 const { data: result, error } = await this.supabase
                     .from(table)
                     .update(sanitizedData)
@@ -335,10 +372,10 @@ class DatabaseManager {
 
         if (index === -1) throw new Error('Item not found');
 
-        items[index] = { 
-            ...items[index], 
-            ...data, 
-            updated_at: new Date().toISOString() 
+        items[index] = {
+            ...items[index],
+            ...data,
+            updated_at: new Date().toISOString()
         };
         localStorage.setItem(table, JSON.stringify(items));
         return items[index];
@@ -472,6 +509,7 @@ class DatabaseManager {
         }
     }
 
+    // Standard get methods for all tables
     async getUsers() {
         return await this.read(this.TABLES.USERS, {
             orderBy: 'created_at',
@@ -480,10 +518,13 @@ class DatabaseManager {
     }
 
     async getEmployees() {
-        return await this.read(this.TABLES.EMPLOYEES, {
+        console.log('🔍 DEBUG: Fetching employees from Supabase...');
+        const employees = await this.read(this.TABLES.EMPLOYEES, {
             orderBy: 'created_at',
             ascending: false
         });
+        console.log('🔍 DEBUG: Employees fetched:', employees);
+        return employees;
     }
 
     async getCustomers() {
@@ -500,6 +541,39 @@ class DatabaseManager {
         });
     }
 
+    // Add to db.js - DatabaseManager class
+    async getProducts() {
+        try {
+            const { data, error } = await this.supabase
+                .from('products')
+                .select('*')
+                .eq('is_active', true)
+                .order('name');
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            return [];
+        }
+    }
+
+    async searchCustomers(query) {
+        try {
+            const { data, error } = await this.supabase
+                .from('customers')
+                .select('*')
+                .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
+                .limit(10);
+
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error searching customers:', error);
+            return [];
+        }
+    }
+
     async getPayments() {
         return await this.read(this.TABLES.PAYMENTS, {
             orderBy: 'payment_date',
@@ -512,6 +586,31 @@ class DatabaseManager {
             orderBy: 'record_date',
             ascending: false
         });
+    }
+
+    // NEW METHODS: Yearly Allocations and Advance Payments
+    async getYearlyAllocations() {
+        try {
+            return await this.read(this.TABLES.YEARLY_ALLOCATIONS, {
+                orderBy: 'created_at',
+                ascending: false
+            });
+        } catch (error) {
+            console.warn('Error getting yearly allocations, returning empty array:', error.message);
+            return [];
+        }
+    }
+
+    async getAdvancePayments() {
+        try {
+            return await this.read(this.TABLES.ADVANCE_PAYMENTS, {
+                orderBy: 'payment_date',
+                ascending: false
+            });
+        } catch (error) {
+            console.warn('Error getting advance payments, returning empty array:', error.message);
+            return [];
+        }
     }
 
     initializeLocalStorage() {

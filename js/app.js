@@ -7,13 +7,11 @@ class UpdateManager {
     }
 
     setupEventListeners() {
-        // Safe event listener setup with checks
         if (!window.electronAPI) {
             console.warn('electronAPI not available - running in browser mode');
             return;
         }
 
-        // Update status events with safe access
         if (window.electronAPI.onUpdateStatus) {
             window.electronAPI.onUpdateStatus((event, data) => {
                 console.log('Update status:', data?.status);
@@ -64,7 +62,6 @@ class UpdateManager {
     async checkForUpdates() {
         if (this.isChecking) return;
 
-        // Check if electronAPI is available
         if (!window.electronAPI?.checkForUpdates) {
             this.ui.showToast('Auto-update not available in browser', 'warning');
             return;
@@ -89,52 +86,69 @@ class UpdateManager {
         }
 
         const modalHtml = `
-            <div id="updateAvailableModal" class="modal">
-                <div class="modal-content" style="max-width: 500px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-download"></i> Update Available</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <p><strong>Version ${updateInfo.version || 'Unknown'}</strong> is available!</p>
-                        ${updateInfo.releaseNotes ? `
-                            <div class="release-notes">
-                                <h4>What's New:</h4>
-                                <p>${updateInfo.releaseNotes}</p>
-                            </div>
-                        ` : ''}
-                        <p>The update will download automatically.</p>
-                        <div class="download-progress" style="display: none;">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="updateProgressFill"></div>
-                            </div>
-                            <p id="updateProgressText">0%</p>
+        <div id="updateAvailableModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> Update Available</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Version ${updateInfo.version || 'Unknown'}</strong> is available!</p>
+                    ${updateInfo.releaseNotes ? `
+                        <div class="release-notes">
+                            <h4>What's New:</h4>
+                            <p>${updateInfo.releaseNotes}</p>
                         </div>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="cancelUpdate" class="btn-secondary">Later</button>
-                        <button id="downloadUpdate" class="btn-primary">
-                            <i class="fas fa-download"></i> Download Now
-                        </button>
+                    ` : ''}
+                    <p>The update will download automatically.</p>
+                    <div class="download-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="updateProgressFill"></div>
+                        </div>
+                        <p id="updateProgressText">0%</p>
                     </div>
                 </div>
+                <div class="modal-actions">
+                    <button id="cancelUpdate" class="btn-secondary">Later</button>
+                    <button id="downloadUpdate" class="btn-primary">
+                        <i class="fas fa-download"></i> Download Now
+                    </button>
+                </div>
             </div>
-        `;
+        </div>
+    `;
 
-        this.showUpdateModal(modalHtml, 'updateAvailableModal');
+        this.showCustomModal(modalHtml, 'updateAvailableModal');
 
-        document.getElementById('downloadUpdate')?.addEventListener('click', () => {
-            this.hideUpdateModal();
-            this.showDownloadProgress(0);
-        });
+        // Use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+            const downloadBtn = document.getElementById('downloadUpdate');
+            const cancelBtn = document.getElementById('cancelUpdate');
+            const closeBtn = document.querySelector('#updateAvailableModal .modal-close');
 
-        document.getElementById('cancelUpdate')?.addEventListener('click', () => {
-            this.hideUpdateModal();
-        });
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', () => {
+                    this.hideUpdateModal();
+                    this.showDownloadProgress(0);
+                    // Start download
+                    if (window.electronAPI?.downloadUpdate) {
+                        window.electronAPI.downloadUpdate();
+                    }
+                });
+            }
 
-        document.querySelector('#updateAvailableModal .modal-close')?.addEventListener('click', () => {
-            this.hideUpdateModal();
-        });
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.hideUpdateModal();
+                });
+            }
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    this.hideUpdateModal();
+                });
+            }
+        }, 100);
     }
 
     showDownloadProgress(percent) {
@@ -215,7 +229,6 @@ class UpdateManager {
         });
 
         document.getElementById('downloadManual').addEventListener('click', () => {
-            // Open download page in browser
             window.open('https://github.com/Mathikumar1311/dashboard-smj-bricks/releases/latest', '_blank');
             this.hideUpdateModal();
         });
@@ -233,10 +246,8 @@ class UpdateManager {
         modal.innerHTML = html;
         document.body.appendChild(modal);
 
-        // Show modal
         modal.style.display = 'flex';
 
-        // Close on background click
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 this.hideUpdateModal();
@@ -277,7 +288,6 @@ class BusinessDashboard {
         }
         this.initializationPromise = this._initialize();
         return this.initializationPromise;
-
     }
 
     async _initialize() {
@@ -319,18 +329,25 @@ class BusinessDashboard {
     }
 
     initializeUpdateManager() {
-        // Only initialize if electronAPI is available
         if (window.electronAPI) {
             this.updateManager = new UpdateManager(this.ui);
             this.addUpdateMenuOption();
             console.log('Electron API methods:', Object.keys(window.electronAPI));
             console.log('Electron API available:', !!window.electronAPI);
+
+            // Add this line to make update manager globally accessible
+            window.updateManager = this.updateManager;
         } else {
             console.log('Running in browser mode - auto-update disabled');
+            // Create a dummy update manager for browser mode
+            this.updateManager = {
+                checkForUpdates: () => {
+                    this.ui.showToast('Auto-update not available in browser mode', 'info');
+                },
+                cleanup: () => { }
+            };
         }
-
     }
-
 
     async initializeCore() {
         console.log('📦 Initializing core utilities...');
@@ -354,12 +371,22 @@ class BusinessDashboard {
         console.log('✅ Database initialized');
     }
 
-    async initializeAuth() {
-        console.log('🔐 Initializing authentication...');
-        this.auth = new AuthManager(this.db);
-        await this.auth.initialize();
-        console.log('✅ Authentication initialized');
-    }
+    // In BusinessDashboard.js - use old version but fix this line:
+async initializeAuth() {
+    console.log('🔐 Initializing authentication...');
+    
+    // FIX: Pass db only (like old version) but ensure UI is available if needed
+    this.auth = new AuthManager({
+        db: this.db,
+        ui: this.ui // Only if AuthManager actually uses UI in constructor
+    });
+    
+    // OR if AuthManager only needs db:
+    this.auth = new AuthManager(this.db);
+    
+    await this.auth.initialize();
+    console.log('✅ Authentication initialized');
+}
 
     async initializeUI() {
         console.log('🎨 Initializing UI...');
@@ -376,40 +403,62 @@ class BusinessDashboard {
         console.log('👥 Initializing business managers...');
 
         try {
+            // ✅ VERIFY ALL DEPENDENCIES EXIST
+            if (!this.db) throw new Error('Database manager not initialized');
+            if (!this.ui) throw new Error('UI manager not initialized');
+            if (!this.auth) throw new Error('Auth manager not initialized');
+
             const dependencies = {
                 db: this.db,
                 ui: this.ui,
                 auth: this.auth
             };
 
+            console.log('✅ Dependencies verified:', {
+                db: !!this.db,
+                ui: !!this.ui,
+                auth: !!this.auth
+            });
+
+            // ✅ INITIALIZE MANAGERS WITH CORRECT NAMES
             this.managers = {
                 user: new UserManager(dependencies),
                 employee: new EmployeeManager(dependencies),
                 billing: new BillingManager(dependencies),
                 reports: new ReportsManager(dependencies),
-                export: new ExportManager(dependencies)
+                export: new ExportManager(dependencies),
+                settings: new SettingsManager(dependencies)
             };
 
-            await Promise.all([
-                this.managers.user.initialize(),
-                this.managers.employee.initialize(),
-                this.managers.billing.initialize(),
-                this.managers.reports.initialize(),
-                this.managers.export.initialize()
-            ]);
+            // ✅ SAFE INITIALIZATION
+            const initializationPromises = Object.entries(this.managers).map(async ([key, manager]) => {
+                try {
+                    if (manager && typeof manager.initialize === 'function') {
+                        await manager.initialize();
+                        console.log(`✅ ${key} manager initialized`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Failed to initialize ${key} manager:`, error);
+                    throw error;
+                }
+            });
 
-            // Make managers globally accessible
+            await Promise.all(initializationPromises);
+
+            // ✅ MAKE MANAGERS GLOBALLY ACCESSIBLE
             window.app = this;
             window.exportManager = this.managers.export;
 
             this.setupSectionListeners();
 
-            console.log('✅ Business managers initialized');
+            console.log('✅ All business managers initialized successfully');
         } catch (error) {
             console.error('❌ Failed to initialize business managers:', error);
             throw error;
         }
     }
+
+
 
     setupSectionListeners() {
         window.addEventListener('sectionChanged', (event) => {
@@ -428,7 +477,6 @@ class BusinessDashboard {
     }
 
     addUpdateMenuOption() {
-        // Add "Check for Updates" to your app menu or settings
         setTimeout(() => {
             const settingsMenu = document.getElementById('settingsMenu');
             if (settingsMenu) {
@@ -442,6 +490,7 @@ class BusinessDashboard {
             }
         }, 1000);
     }
+
     async loadInitialData() {
         try {
             console.log('📊 Loading initial dashboard data...');
@@ -467,47 +516,159 @@ class BusinessDashboard {
                 return;
             }
 
+            // ✅ FIX: Add dashboard to managerMap with null value (handled by BusinessDashboard)
+            const managerMap = {
+                'dashboard': null, // Dashboard is handled by BusinessDashboard itself
+                'users': 'user',
+                'employees': 'employee',
+                'salary': 'employee',
+                'billing': 'billing',
+                'customers': 'billing',
+                'pending': 'billing',
+                'payments': 'billing',
+                'reports': 'reports',
+                'settings': 'settings'
+            };
+
+            const managerName = managerMap[sectionId];
+
+            // ✅ FIX: Handle dashboard separately
+            if (sectionId === 'dashboard') {
+                await this.loadDashboardData();
+                return;
+            }
+
+            if (!managerName || !this.managers[managerName]) {
+                console.warn(`Manager not available for section: ${sectionId}`);
+                this.ui.showToast(`${sectionId} functionality not available`, 'warning');
+                return;
+            }
+
+            const manager = this.managers[managerName];
+
             switch (sectionId) {
+                case 'users':
+                    await manager.loadUsers();
+                    break;
                 case 'employees':
-                    if (this.managers.employee) {
-                        await this.managers.employee.loadEmployees();
-                    }
+                    await manager.loadEmployees();
                     break;
                 case 'salary':
-                    if (this.managers.employee) {
-                        // Setup salary form when salary section is shown
-                        this.managers.employee.setupSalaryForm();
-                        await this.managers.employee.loadSalaries();
+                    if (manager.setupSalaryForm) {
+                        manager.setupSalaryForm();
                     }
+                    await manager.loadSalaries();
+                    break;
+                case 'billing':
+                    await manager.loadBills();
                     break;
                 case 'customers':
-                    if (this.managers.customer) {
-                        await this.managers.customer.loadCustomers();
+                    await manager.loadCustomers();
+                    break;
+                case 'pending':
+                    await manager.loadPendingBills();
+                    break;
+                case 'payments':
+                    await manager.loadPayments();
+                    break;
+                case 'reports':
+                    await manager.loadReports();
+                    break;
+                case 'settings':
+                    try {
+                        console.log('⚙️ Loading settings section...');
+
+                        // Always load basic settings first
+                        await this.loadSettings();
+
+                        // Try to use SettingsManager if available
+                        if (this.managers.settings) {
+                            if (typeof this.managers.settings.loadSettings === 'function') {
+                                await this.managers.settings.loadSettings();
+                            }
+                            if (typeof this.managers.settings.setupSettingsForms === 'function') {
+                                this.managers.settings.setupSettingsForms();
+                            }
+                        }
+
+                        console.log('✅ Settings section loaded successfully');
+                    } catch (error) {
+                        console.error('Error in settings section:', error);
+                        this.ui.showToast('Error loading settings', 'error');
                     }
                     break;
-                case 'bills':
-                    if (this.managers.bill) {
-                        await this.managers.bill.loadBills();
-                    }
-                    break;
-                case 'users':
-                    if (this.managers.user) {
-                        await this.managers.user.loadUsers();
-                    }
-                    break;
-                case 'dashboard':
-                    await this.loadDashboardData();
-                    break;
+                default:
+                    console.warn(`Unknown section: ${sectionId}`);
             }
         } catch (error) {
             console.error(`Error loading data for ${sectionId}:`, error);
+            this.ui.showToast(`Error loading ${sectionId} data`, 'error');
+        }
+    }
+
+    async loadDashboardData() {
+        try {
+            console.log('📊 Loading dashboard data...');
+
+            // Get all necessary data for dashboard
+            const [bills, customers, employees, payments] = await Promise.all([
+                this.db.getBills(),
+                this.db.getCustomers(),
+                this.db.getEmployees(),
+                this.db.getPayments()
+            ]);
+
+            // Calculate dashboard statistics
+            const totalSales = bills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
+            const totalGST = bills.reduce((sum, bill) => sum + (bill.gst_amount || 0), 0);
+            const totalBills = bills.length;
+            const pendingBills = bills.filter(bill => bill.status === 'pending').length;
+            const totalCustomers = customers.length;
+            const totalEmployees = employees.length;
+
+            // Update dashboard cards
+            const totalBalanceEl = document.getElementById('totalBalance');
+            const gstAmountEl = document.getElementById('gstAmount');
+            const recentActivityEl = document.getElementById('recentActivity');
+            const pendingPaymentsEl = document.getElementById('pendingPayments');
+            const totalCustomersEl = document.getElementById('totalCustomers');
+            const totalEmployeesEl = document.getElementById('totalEmployees');
+
+            if (totalBalanceEl) totalBalanceEl.textContent = Utils.formatCurrency(totalSales);
+            if (gstAmountEl) gstAmountEl.textContent = Utils.formatCurrency(totalGST);
+            if (recentActivityEl) recentActivityEl.textContent = totalBills;
+            if (pendingPaymentsEl) pendingPaymentsEl.textContent = pendingBills;
+            if (totalCustomersEl) totalCustomersEl.textContent = totalCustomers;
+            if (totalEmployeesEl) totalEmployeesEl.textContent = totalEmployees;
+
+            console.log('✅ Dashboard data loaded successfully');
+        } catch (error) {
+            console.error('Error loading dashboard data:', error);
+            this.ui.showToast('Error loading dashboard data', 'error');
         }
     }
 
     async updateDashboardStats() {
         try {
-            const stats = await this.db.getDashboardStats();
-            this.ui.updateDashboardStats(stats);
+            const [bills, customers, employees] = await Promise.all([
+                this.db.getBills(),
+                this.db.getCustomers(),
+                this.db.getEmployees()
+            ]);
+
+            const stats = {
+                totalSales: bills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0),
+                totalGST: bills.reduce((sum, bill) => sum + (bill.gst_amount || 0), 0),
+                totalBills: bills.length,
+                pendingBills: bills.filter(bill => bill.status === 'pending').length,
+                totalCustomers: customers.length,
+                totalEmployees: employees.length
+            };
+
+            // Update UI with stats
+            if (this.ui && typeof this.ui.updateDashboardStats === 'function') {
+                this.ui.updateDashboardStats(stats);
+            }
         } catch (error) {
             console.error('Error updating dashboard stats:', error);
         }
@@ -518,33 +679,9 @@ class BusinessDashboard {
         const element = document.getElementById('onlineUsersCount');
         if (element) element.textContent = onlineCount;
     }
-    sanitizeDataForTable(table, data) {
-        const sanitized = { ...data };
 
-        switch (table) {
-            case 'users':
-                const userFields = ['id', 'username', 'password', 'name', 'email', 'phone', 'role', 'status', 'created_at', 'updated_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!userFields.includes(key)) delete sanitized[key];
-                });
-                break;
-
-            case 'employees':
-                // FIXED: Accept custom string IDs for employees
-                const employeeFields = ['id', 'name', 'phone', 'email', 'employee_type', 'vehicle_number', 'role', 'salary', 'join_date', 'created_at', 'updated_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!employeeFields.includes(key)) delete sanitized[key];
-                });
-                break;
-
-            // ... other tables ...
-        }
-
-        return sanitized;
-    }
     async updateDatabaseStatus() {
         try {
-            // Use the healthCheck method that now exists
             const isHealthy = await this.db.healthCheck();
             const statusElement = document.getElementById('dbStatus');
 
@@ -565,14 +702,58 @@ class BusinessDashboard {
     }
 
     async loadSettings() {
-        console.log('⚙️ Loading settings...');
+        try {
+            console.log('⚙️ Loading settings...');
+
+            // Load current user data for settings
+            const currentUser = this.auth.getCurrentUser();
+            if (currentUser) {
+                const settingsAvatar = document.getElementById('settingsAvatar');
+                const userName = document.getElementById('userName');
+
+                if (settingsAvatar) {
+                    settingsAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff`;
+                }
+                if (userName) {
+                    userName.textContent = currentUser.name;
+                }
+            }
+
+            // Setup theme selector
+            this.setupThemeSelector();
+
+            console.log('✅ Settings loaded successfully');
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            this.ui.showToast('Error loading settings', 'error');
+        }
+    }
+
+    setupThemeSelector() {
+        const themeOptions = document.querySelectorAll('.theme-option');
+        themeOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                const theme = option.dataset.theme;
+                themeOptions.forEach(opt => opt.classList.remove('active'));
+                option.classList.add('active');
+
+                if (window.themeManager) {
+                    window.themeManager.setTheme(theme);
+                }
+            });
+        });
     }
 
     async finalizeInitialization() {
         console.log('🎯 Finalizing initialization...');
         this.setupErrorHandling();
         this.setupCleanup();
-        this.ui.initializeFromSavedState();
+
+        // Initialize from saved state
+        if (this.ui && typeof this.ui.initializeFromSavedState === 'function') {
+            this.ui.initializeFromSavedState();
+        }
+
         this.notifyAppReady();
         console.log('✅ Initialization complete');
     }
@@ -580,15 +761,20 @@ class BusinessDashboard {
     setupErrorHandling() {
         window.addEventListener('error', (e) => {
             console.error('Global error:', e.error);
-            this.ui.showToast('An unexpected error occurred', 'error');
+            if (this.ui) {
+                this.ui.showToast('An unexpected error occurred', 'error');
+            }
         });
 
         window.addEventListener('unhandledrejection', (e) => {
             console.error('Unhandled promise rejection:', e.reason);
-            this.ui.showToast('An operation failed', 'error');
+            if (this.ui) {
+                this.ui.showToast('An operation failed', 'error');
+            }
             e.preventDefault();
         });
 
+        // Global error handler
         window.handleGlobalError = (error) => {
             console.error('Global error handler:', error);
             if (this.ui) {
@@ -606,20 +792,39 @@ class BusinessDashboard {
 
     cleanup() {
         console.log('🧹 Cleaning up application...');
+
+        // Cleanup managers
+        Object.values(this.managers).forEach(manager => {
+            if (manager && typeof manager.cleanup === 'function') {
+                manager.cleanup();
+            }
+        });
+
+        // Cleanup core components
         if (this.db) this.db.cleanup();
         if (this.ui) this.ui.cleanup?.();
         if (this.auth) this.auth.cleanup?.();
+        if (this.updateManager) this.updateManager.cleanup();
+
         console.log('✅ Cleanup completed');
     }
 
     notifyAppReady() {
-        this.ui.showAppReady();
+        // Show app ready notification
+        if (this.ui && typeof this.ui.showAppReady === 'function') {
+            this.ui.showAppReady();
+        }
+
+        // Dispatch app ready event
         window.dispatchEvent(new CustomEvent('appReady', {
             detail: {
-                version: '1.0.0',
-                timestamp: new Date().toISOString()
+                version: '2.1.0',
+                timestamp: new Date().toISOString(),
+                managers: Object.keys(this.managers)
             }
         }));
+
+        console.log('🎊 Application fully loaded and ready!');
     }
 
     handleInitializationError(error) {
@@ -629,53 +834,295 @@ class BusinessDashboard {
         if (this.ui && typeof this.ui.showFatalError === 'function') {
             this.ui.showFatalError(errorMessage);
         } else {
+            // Fallback error display
             document.body.innerHTML = `
-                <div style="padding: 2rem; text-align: center;">
-                    <h1 style="color: #dc3545;">Application Error</h1>
-                    <p>${errorMessage}</p>
-                    <button onclick="window.location.reload()">Reload Application</button>
+                <div style="padding: 2rem; text-align: center; font-family: Arial, sans-serif;">
+                    <h1 style="color: #dc3545; margin-bottom: 1rem;">Application Error</h1>
+                    <p style="margin-bottom: 1.5rem; color: #666;">${errorMessage}</p>
+                    <button onclick="window.location.reload()" 
+                            style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        Reload Application
+                    </button>
                 </div>
             `;
         }
     }
 
+    // Manager access methods
     getManagers() {
         return this.managers;
     }
 
+    getManager(name) {
+        return this.managers[name];
+    }
+
+    // Utility methods
     isReady() {
         return this.isInitialized;
     }
 
+    getAppInfo() {
+        return {
+            version: '2.1.0',
+            initialized: this.isInitialized,
+            managers: Object.keys(this.managers),
+            database: this.db?.isOnline ? 'Online' : 'Offline'
+        };
+    }
+
+    // Data sanitization methods
+    sanitizeDataForTable(table, data) {
+        const sanitized = { ...data };
+
+        switch (table) {
+            case 'users':
+                const userFields = ['id', 'username', 'password', 'name', 'email', 'phone', 'role', 'status', 'created_at', 'updated_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!userFields.includes(key)) delete sanitized[key];
+                });
+                break;
+
+            case 'employees':
+                const employeeFields = ['id', 'name', 'phone', 'email', 'employee_type', 'vehicle_number', 'role', 'salary', 'join_date', 'created_at', 'updated_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!employeeFields.includes(key)) delete sanitized[key];
+                });
+                break;
+
+            case 'bills':
+                const billFields = ['id', 'bill_number', 'bill_date', 'customer_name', 'customer_phone', 'customer_email', 'items', 'sub_total', 'gst_rate', 'gst_amount', 'total_amount', 'status', 'created_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!billFields.includes(key)) delete sanitized[key];
+                });
+                break;
+
+            case 'customers':
+                const customerFields = ['id', 'name', 'phone', 'email', 'address', 'total_bills', 'total_amount', 'created_at'];
+                Object.keys(sanitized).forEach(key => {
+                    if (!customerFields.includes(key)) delete sanitized[key];
+                });
+                break;
+        }
+
+        return sanitized;
+    }
+
+    // Export functionality
+    async exportData(type, format = 'excel') {
+        try {
+            let data = [];
+            let filename = '';
+            let title = '';
+
+            switch (type) {
+                case 'users':
+                    data = await this.db.getUsers();
+                    filename = 'users_export';
+                    title = 'Users Export';
+                    break;
+                case 'employees':
+                    data = await this.db.getEmployees();
+                    filename = 'employees_export';
+                    title = 'Employees Export';
+                    break;
+                case 'bills':
+                    data = await this.db.getBills();
+                    filename = 'bills_export';
+                    title = 'Bills Export';
+                    break;
+                case 'customers':
+                    data = await this.db.getCustomers();
+                    filename = 'customers_export';
+                    title = 'Customers Export';
+                    break;
+                case 'payments':
+                    data = await this.db.getPayments();
+                    filename = 'payments_export';
+                    title = 'Payments Export';
+                    break;
+                default:
+                    throw new Error(`Unknown export type: ${type}`);
+            }
+
+            if (data.length === 0) {
+                this.ui.showToast(`No ${type} data to export`, 'warning');
+                return;
+            }
+
+            // Use export manager if available
+            if (window.exportManager && format === 'excel') {
+                await window.exportManager.exportToExcel(data, filename, title);
+            } else if (window.exportManager && format === 'pdf') {
+                await window.exportManager.exportToPDF(data, filename, title);
+            } else {
+                // Fallback to Utils
+                Utils.exportToExcel(data, filename);
+            }
+
+            this.ui.showToast(`${type} exported successfully`, 'success');
+        } catch (error) {
+            console.error(`Error exporting ${type}:`, error);
+            this.ui.showToast(`Error exporting ${type}: ${error.message}`, 'error');
+        }
+    }
+
+    // Backup functionality
+    async backupAllData() {
+        try {
+            this.ui.showExportProgress('Creating backup...');
+
+            const allData = await this.db.exportAllData();
+
+            if (window.electronAPI && window.electronAPI.exportAllData) {
+                const result = await window.electronAPI.exportAllData(allData);
+                if (result.success) {
+                    this.ui.showToast(`Backup created successfully: ${result.filePath}`, 'success');
+                } else {
+                    throw new Error(result.error);
+                }
+            } else {
+                // Browser fallback - download as JSON
+                const dataStr = JSON.stringify(allData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `business_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                this.ui.showToast('Backup downloaded successfully', 'success');
+            }
+        } catch (error) {
+            console.error('Error creating backup:', error);
+            this.ui.showToast('Error creating backup: ' + error.message, 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
+
+    // Static method to get instance
     static getInstance() {
         return window.app;
     }
 }
 
-// Global initialization
+// Global initialization with enhanced error handling
 let appInstance = null;
 
+async function initializeApp() {
+    try {
+        console.log('🎉 Starting application...');
+
+        // Check if required dependencies are available
+        if (typeof Utils === 'undefined') {
+            throw new Error('Utils library not loaded');
+        }
+
+        if (typeof DatabaseManager === 'undefined') {
+            throw new Error('DatabaseManager not loaded');
+        }
+
+        if (typeof AuthManager === 'undefined') {
+            throw new Error('AuthManager not loaded');
+        }
+
+        if (typeof UIManager === 'undefined') {
+            throw new Error('UIManager not loaded');
+        }
+
+        // Create and initialize app instance
+        appInstance = new BusinessDashboard();
+        await appInstance.initialize();
+
+        // Make app globally accessible
+        window.app = appInstance;
+
+        console.log('🎊 Application fully loaded and ready!');
+
+        // Dispatch global ready event
+        window.dispatchEvent(new Event('appFullyLoaded'));
+
+    } catch (error) {
+        console.error('💥 Failed to initialize application:', error);
+
+        // Enhanced error display
+        const errorHtml = `
+            <div style="
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-family: Arial, sans-serif;
+                color: white;
+                z-index: 10000;
+            ">
+                <div style="
+                    background: rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    padding: 3rem;
+                    border-radius: 15px;
+                    text-align: center;
+                    max-width: 500px;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                ">
+                    <h1 style="margin-bottom: 1rem; font-size: 2rem;">🚨 Application Error</h1>
+                    <p style="margin-bottom: 1.5rem; font-size: 1.1rem; opacity: 0.9;">
+                        The application failed to start properly.
+                    </p>
+                    <div style="
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 1rem;
+                        border-radius: 8px;
+                        margin-bottom: 2rem;
+                        text-align: left;
+                        font-family: monospace;
+                        font-size: 0.9rem;
+                    ">
+                        ${error.message}
+                    </div>
+                    <button onclick="window.location.reload()" 
+                            style="
+                                padding: 12px 30px;
+                                background: rgba(255, 255, 255, 0.2);
+                                color: white;
+                                border: 2px solid rgba(255, 255, 255, 0.3);
+                                border-radius: 8px;
+                                cursor: pointer;
+                                font-size: 1rem;
+                                transition: all 0.3s ease;
+                            "
+                            onmouseover="this.style.background='rgba(255, 255, 255, 0.3)';"
+                            onmouseout="this.style.background='rgba(255, 255, 255, 0.2)';">
+                        🔄 Reload Application
+                    </button>
+                    <div style="margin-top: 2rem; font-size: 0.9rem; opacity: 0.7;">
+                        If the problem persists, check the browser console for details.
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.innerHTML = errorHtml;
+    }
+}
+
+// Start initialization based on document ready state
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
     initializeApp();
 }
 
-async function initializeApp() {
-    try {
-        console.log('🎉 Starting application...');
-        appInstance = new BusinessDashboard();
-        await appInstance.initialize();
-        window.app = appInstance;
-        console.log('🎊 Application fully loaded and ready!');
-    } catch (error) {
-        console.error('💥 Failed to initialize application:', error);
-        document.body.innerHTML = `
-            <div style="padding: 2rem; text-align: center;">
-                <h1>Application Failed to Load</h1>
-                <p>Please refresh the page.</p>
-                <button onclick="window.location.reload()">Retry</button>
-            </div>
-        `;
-    }
+// Export for module systems if needed
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { BusinessDashboard, UpdateManager };
 }

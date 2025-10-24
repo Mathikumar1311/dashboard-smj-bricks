@@ -26,22 +26,19 @@
                 <p class="app-tagline">Professional Management System</p>
             </div>
             <div class="loading-container">
-                <div class="loading-spinner">
-                    <div class="spinner-ring"></div>
-                    <div class="spinner-icon">
-                        <i class="fas fa-cog"></i>
-                    </div>
-                </div>
-                <p class="loading-text">Loading Application...</p>
+                <!-- REMOVED THE SPINNER - Using only progress bar -->
                 <div class="loading-progress">
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                        <span class="progress-text">0%</span>
                     </div>
-                    <span class="progress-text">0%</span>
+                    <p class="loading-status">Initializing application...</p>
                 </div>
             </div>
             <div class="version-info">
-                <span>Version 2.1.0</span>
+                <span>Version 1.0.5</span>
             </div>
         </div>
     </div>
@@ -205,11 +202,15 @@
                     <div class="content-header">
                         <h2><i class="fas fa-users"></i> User Management</h2>
                         <div class="header-actions">
-                            <button id="addUserBtn" class="btn-primary">
-                                <i class="fas fa-plus"></i> Add User
-                            </button>
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="userSearch" placeholder="Search users...">
+                            </div>
                             <button id="exportUsersBtn" class="btn-secondary">
                                 <i class="fas fa-download"></i> Export
+                            </button>
+                            <button id="addUserBtn" class="btn-primary">
+                                <i class="fas fa-plus"></i> Add User
                             </button>
                         </div>
                     </div>
@@ -224,7 +225,7 @@
                                     <th>Role</th>
                                     <th>Created Date</th>
                                     <th>Status</th>
-                                    <th>Total</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="usersTableBody">
@@ -277,7 +278,8 @@
                                     <th data-lang="type">Type</th>
                                     <th data-lang="role">Role</th>
                                     <th data-lang="join_date">Join Date</th>
-                                    <th data-lang="total_salary">Total Salary</th>
+                                    <th>Allocated</th>
+                                    <th>Remaining</th>
                                     <th data-lang="actions">Actions</th>
                                 </tr>
                             </thead>
@@ -292,8 +294,53 @@
                 <div id="salaryContent" class="content-section">
                     <div class="content-header">
                         <h2 data-lang="salary"><i class="fas fa-money-bill-wave"></i> Salary Management</h2>
+                        <div class="header-actions">
+                            <div class="filter-buttons">
+                                <button class="btn-filter active" data-filter="all">All</button>
+                                <button class="btn-filter" data-filter="pending">Pending</button>
+                                <button class="btn-filter" data-filter="paid">Paid</button>
+                                <button class="btn-filter" data-filter="today">Today</button>
+                                <button class="btn-filter" data-filter="week">This Week</button>
+                                <button class="btn-filter" data-filter="month">This Month</button>
+                            </div>
+                            <button id="exportSalaryBtn" class="btn-secondary">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                        </div>
                     </div>
-                    <!-- Update your salary form section -->
+
+                    <!-- Salary Summary Cards -->
+                    <div class="summary-cards" style="margin-bottom: 2rem;">
+                        <div class="summary-card">
+                            <div class="summary-icon total-salary">
+                                <i class="fas fa-wallet"></i>
+                            </div>
+                            <div class="summary-content">
+                                <div class="summary-label">Total Paid This Month</div>
+                                <div class="summary-value" id="totalPaidAmount">₹0</div>
+                            </div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-icon pending">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="summary-content">
+                                <div class="summary-label">Pending Payments</div>
+                                <div class="summary-value" id="pendingCount">0</div>
+                            </div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-icon incentive">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="summary-content">
+                                <div class="summary-label">Total Incentives</div>
+                                <div class="summary-value" id="totalIncentives">₹0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Salary Form Section -->
                     <div class="salary-form-container">
                         <form id="salaryForm" class="form-card">
                             <div class="form-row">
@@ -301,7 +348,6 @@
                                     <label>Employee</label>
                                     <select id="salaryEmployee" required>
                                         <option value="">Select Employee</option>
-                                        <!-- Options will be populated by JavaScript -->
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -311,7 +357,7 @@
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label>Base Salary (₹)</label>
+                                    <label>Base Salary (₹) *</label>
                                     <input type="number" id="salaryAmount" required min="0" step="0.01">
                                 </div>
                                 <div class="form-group">
@@ -319,8 +365,22 @@
                                     <input type="number" id="incentiveAmount" min="0" step="0.01" value="0">
                                 </div>
                                 <div class="form-group">
+                                    <label>Advance Amount (₹)</label>
+                                    <input type="number" id="advanceAmount" min="0" step="0.01" value="0"
+                                        placeholder="Optional">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
                                     <label>Total Amount (₹)</label>
                                     <input type="text" id="totalAmount" readonly class="readonly-field">
+                                </div>
+                                <div class="form-group">
+                                    <label>Status</label>
+                                    <select id="salaryStatus" required>
+                                        <option value="paid">Paid</option>
+                                        <option value="pending">Pending</option>
+                                    </select>
                                 </div>
                             </div>
                             <button type="submit" class="btn-primary">
@@ -328,21 +388,22 @@
                             </button>
                         </form>
                     </div>
+
                     <div class="table-container">
-                        <div class="table-actions">
-                            <button id="exportSalaryBtn" class="btn-secondary">
-                                <i class="fas fa-download"></i> Export
-                            </button>
-                        </div>
                         <table id="salaryTable" class="data-table">
                             <thead>
                                 <tr>
+                                    <th>Time</th>
                                     <th data-lang="employee_id">Employee ID</th>
                                     <th data-lang="employee">Employee</th>
-                                    <th data-lang="date">Date</th>
-                                    <th data-lang="amount">Amount</th>
-                                    <th data-lang="incentive_amount">Incentive</th>
-                                    <th data-lang="actions">Total</th>
+                                    <th>Salary</th>
+                                    <th>Incentive</th>
+                                    <th>Advance</th>
+                                    <th>Total</th>
+                                    <th>Allocation Used</th>
+                                    <th>Status</th>
+                                    <th>Week</th>
+                                    <th data-lang="actions">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="salaryTableBody"></tbody>
@@ -531,39 +592,73 @@
                     <div class="content-header">
                         <h2 data-lang="settings"><i class="fas fa-cog"></i> Settings</h2>
                     </div>
-                    <div class="settings-grid">
-                        <div class="settings-section">
-                            <h3 data-lang="profile_settings">Profile Settings</h3>
-                            <div class="avatar-upload">
-                                <img id="settingsAvatar" class="user-avatar large"
-                                    src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff"
-                                    alt="Avatar">
-                                <button id="uploadAvatarBtn" class="btn-primary">
-                                    <i class="fas fa-upload"></i> Upload Avatar
-                                </button>
-                            </div>
-                        </div>
-                        <div class="settings-section">
-                            <h3>Theme Settings</h3>
-                            <div class="theme-selector">
-                                <div class="theme-options">
-                                    <div class="theme-option active" data-theme="orange">
-                                        <div class="theme-preview orange-theme"></div>
-                                        <span>Orange</span>
-                                    </div>
-                                    <div class="theme-option" data-theme="blue">
-                                        <div class="theme-preview blue-theme"></div>
-                                        <span>Blue</span>
-                                    </div>
-                                    <div class="theme-option" data-theme="green">
-                                        <div class="theme-preview green-theme"></div>
-                                        <span>Green</span>
-                                    </div>
-                                    <div class="theme-option" data-theme="purple">
-                                        <div class="theme-preview purple-theme"></div>
-                                        <span>Purple</span>
+
+                    <!-- Add navigation tabs -->
+                    <div class="settings-nav">
+                        <button class="nav-tab active" data-tab="profile">Profile</button>
+                        <button class="nav-tab" data-tab="appearance">Appearance</button>
+                        <button class="nav-tab" data-tab="security">Security</button>
+                        <button class="nav-tab" data-tab="backup">Backup & Restore</button>
+                    </div>
+                    <!-- settings content -->
+                    <div class="settings-content">
+                        <!-- Profile Tab -->
+                        <div id="profileTab" class="tab-content active">
+                            <div class="settings-section">
+                                <h3 data-lang="profile_settings">Profile Settings</h3>
+                                <div class="avatar-upload-large">
+                                    <img id="settingsAvatar" class="user-avatar xlarge"
+                                        src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff"
+                                        alt="Avatar">
+                                    <div class="avatar-actions">
+                                        <button id="uploadAvatarBtn" class="btn-primary">
+                                            <i class="fas fa-upload"></i> Upload Avatar
+                                        </button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Appearance Tab -->
+                        <div id="appearanceTab" class="tab-content">
+                            <div class="settings-section">
+                                <h3>Theme Settings</h3>
+                                <div class="theme-selector">
+                                    <div class="theme-options">
+                                        <div class="theme-option active" data-theme="orange">
+                                            <div class="theme-preview orange-theme"></div>
+                                            <span>Orange</span>
+                                        </div>
+                                        <div class="theme-option" data-theme="blue">
+                                            <div class="theme-preview blue-theme"></div>
+                                            <span>Blue</span>
+                                        </div>
+                                        <div class="theme-option" data-theme="green">
+                                            <div class="theme-preview green-theme"></div>
+                                            <span>Green</span>
+                                        </div>
+                                        <div class="theme-option" data-theme="purple">
+                                            <div class="theme-preview purple-theme"></div>
+                                            <span>Purple</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security Tab -->
+                        <div id="securityTab" class="tab-content">
+                            <div class="settings-section">
+                                <h3>Security Settings</h3>
+                                <p>Security features coming soon...</p>
+                            </div>
+                        </div>
+
+                        <!-- Backup Tab -->
+                        <div id="backupTab" class="tab-content">
+                            <div class="settings-section">
+                                <h3>Backup & Restore</h3>
+                                <p>Backup features coming soon...</p>
                             </div>
                         </div>
                     </div>
@@ -597,9 +692,10 @@
                     <label>Role *</label>
                     <select id="userRole" required>
                         <option value="">Select Role</option>
-                        <option value="admin">Admin</option>
+                        <option value="admin">Administrator</option>
                         <option value="manager">Manager</option>
                         <option value="supervisor">Supervisor</option>
+                        <option value="user">User</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -619,6 +715,9 @@
 
     <!-- Employee Modal -->
     <div id="employeeModal" class="modal hidden">
+        <!-- ADD BACKDROP INSIDE MODAL -->
+        <div class="modal-backdrop"></div>
+
         <div class="modal-content">
             <div class="modal-header">
                 <h3 id="employeeModalTitle">Add Employee</h3>
@@ -630,15 +729,15 @@
                 <div class="form-group">
                     <label>Employee Type *</label>
                     <div class="form-row" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
-                        <label
-                            style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: 2px solid var(--border-color); border-radius: var(--border-radius); cursor: pointer; flex: 1;">
+                        <label class="radio-label">
                             <input type="radio" name="employeeType" value="employee" checked>
-                            <span>👨‍💼 Employee</span>
+                            <i class="fas fa-user-tie"></i>
+                            <span>Employee</span>
                         </label>
-                        <label
-                            style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border: 2px solid var(--border-color); border-radius: var(--border-radius); cursor: pointer; flex: 1;">
+                        <label class="radio-label">
                             <input type="radio" name="employeeType" value="driver">
-                            <span>🚗 Driver</span>
+                            <i class="fas fa-truck"></i>
+                            <span>Driver</span>
                         </label>
                     </div>
                 </div>
@@ -671,9 +770,34 @@
                     <input type="date" id="employeeJoinDate" required>
                 </div>
 
+                <div class="form-group">
+                    <label>Salary Type *</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="salaryType" value="daily" checked>
+                            <i class="fas fa-calendar-day"></i>
+                            <span>Daily</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="salaryType" value="monthly">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Monthly</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div id="vehicleNumberField" class="form-group" style="display: none;">
                     <label>Vehicle Number *</label>
                     <input type="text" id="employeeVehicleNumber" placeholder="e.g., TN01AB1234">
+                </div>
+
+                <!-- ADD THE ALLOCATION FIELD HERE -->
+                <div class="form-group">
+                    <label>Initial Yearly Allocation (₹)</label>
+                    <input type="number" id="employeeAllocation" min="0" step="0.01" value="0"
+                        placeholder="Optional: Set initial allocation amount">
+                    <small style="color: #666; font-size: 0.8rem;">Leave as 0 if you want to set allocation
+                        later</small>
                 </div>
 
                 <div class="form-actions">
@@ -682,6 +806,116 @@
                 </div>
             </form>
         </div>
+    </div>
+
+    <!-- Yearly Allocation Modal -->
+    <div id="allocationModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="allocationModalTitle">Setup Yearly Allocation</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <form id="allocationForm" class="modal-form">
+                <input type="hidden" id="allocationEmployeeId">
+                <input type="hidden" id="allocationId">
+
+                <div class="form-group">
+                    <label>Employee</label>
+                    <input type="text" id="allocationEmployeeName" readonly class="readonly-field">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Year *</label>
+                        <select id="allocationYear" required>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Salary Type *</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="allocationSalaryType" value="daily" checked>
+                                <i class="fas fa-calendar-day"></i>
+                                <span>Daily</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="allocationSalaryType" value="monthly">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span>Monthly</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Allocated Amount (₹) *</label>
+                    <input type="number" id="allocationAmount" required min="1" step="0.01"
+                        placeholder="Enter yearly allocation amount">
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="allocationNotes" placeholder="Add notes about this allocation"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Allocation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Advance Payment Modal -->
+    <div id="advanceModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="advanceModalTitle">Add Advance Payment</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <form id="advanceForm" class="modal-form">
+                <input type="hidden" id="advanceEmployeeId">
+
+                <div class="form-group">
+                    <label>Employee</label>
+                    <input type="text" id="advanceEmployeeName" readonly class="readonly-field">
+                </div>
+
+                <div class="form-group">
+                    <label>Remaining Allocation</label>
+                    <input type="text" id="advanceRemaining" readonly class="readonly-field">
+                </div>
+
+                <div class="form-group">
+                    <label>Advance Amount (₹) *</label>
+                    <input type="number" id="advanceAmount" required min="1" step="0.01"
+                        placeholder="Enter advance amount">
+                    <small>Maximum: <span id="advanceMaxAmount">₹0</span></small>
+                </div>
+
+                <div class="form-group">
+                    <label>Payment Date *</label>
+                    <input type="date" id="advanceDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="advanceNotes" placeholder="Add notes about this advance payment"></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                    <button type="submit" class="btn-primary">Add Advance Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Employee Details Modal -->
+    <div id="employeeDetailsModal" class="modal hidden">
+        <!-- This modal will be populated dynamically by JavaScript -->
     </div>
 
     <!-- Bill Modal -->
@@ -706,6 +940,18 @@
 
                 <div class="form-section">
                     <h4>Customer Details</h4>
+
+                    <div class="form-group">
+                        <label>Search Existing Customer</label>
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="customerSearch" placeholder="Search by name or phone...">
+                        </div>
+                        <div id="customerResults" class="customer-results"></div>
+                        <small style="color: #666;">Search for existing customers or fill details below for new
+                            customer</small>
+                    </div>
+
                     <div class="form-row">
                         <div class="form-group">
                             <label>Customer Name *</label>
@@ -797,6 +1043,47 @@
         </div>
     </div>
 
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-download"></i> Export Options</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="export-options">
+                <div class="export-option" data-format="excel">
+                    <div class="export-icon excel">
+                        <i class="fas fa-file-excel"></i>
+                    </div>
+                    <div class="export-info">
+                        <h4>Export to Excel</h4>
+                        <p>Download as .xlsx file for data analysis</p>
+                    </div>
+                    <div class="export-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+
+                <div class="export-option" data-format="pdf">
+                    <div class="export-icon pdf">
+                        <i class="fas fa-file-pdf"></i>
+                    </div>
+                    <div class="export-info">
+                        <h4>Export to PDF</h4>
+                        <p>Download as .pdf file for reporting</p>
+                    </div>
+                    <div class="export-arrow">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-secondary modal-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast hidden"></div>
 
@@ -810,32 +1097,95 @@
             <p class="loading-text">Loading...</p>
         </div>
     </div>
-    
+
+    <!-- Export Progress Overlay -->
+    <div id="exportProgress" class="modal hidden">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h3><i class="fas fa-download"></i> Exporting Data</h3>
+            </div>
+            <div class="export-progress-content">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+                <p class="progress-text">Preparing data...</p>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Simulate loading progress
+        // Elegant loading animation with better timing
         let progress = 0;
         const progressFill = document.querySelector('.progress-fill');
         const progressText = document.querySelector('.progress-text');
-        
-        const loadingInterval = setInterval(() => {
-            progress += Math.random() * 15;
-            if (progress > 100) {
-                progress = 100;
-                clearInterval(loadingInterval);
-                
-                // Add a small delay before hiding splash screen
-                setTimeout(() => {
-                    document.querySelector('.splash-screen').style.opacity = '0';
-                    setTimeout(() => {
-                        document.querySelector('.splash-screen').style.display = 'none';
-                    }, 500);
-                }, 500);
+        const loadingStatus = document.querySelector('.loading-status');
+        let loadingInterval;
+
+        const loadingSteps = [
+            { percent: 15, text: "Loading core modules..." },
+            { percent: 35, text: "Initializing database..." },
+            { percent: 55, text: "Setting up interface..." },
+            { percent: 75, text: "Loading user data..." },
+            { percent: 90, text: "Finalizing setup..." },
+            { percent: 100, text: "Ready!" }
+        ];
+
+        function updateLoadingStatus(currentProgress) {
+            const step = loadingSteps.find(s => currentProgress <= s.percent) || loadingSteps[loadingSteps.length - 1];
+            if (loadingStatus) {
+                loadingStatus.textContent = step.text;
             }
-            
-            progressFill.style.width = `${progress}%`;
-            progressText.textContent = `${Math.round(progress)}%`;
-        }, 300);
+        }
+
+        function safeUpdateProgress() {
+            if (progressFill && progressFill.style) {
+                progressFill.style.width = `${progress}%`;
+            }
+            if (progressText && progressText.textContent !== undefined) {
+                progressText.textContent = `${Math.round(progress)}%`;
+            }
+            updateLoadingStatus(progress);
+        }
+
+        function startLoadingAnimation() {
+            if (!progressFill || !progressText || !loadingStatus) {
+                console.warn('Progress elements not found');
+                return;
+            }
+
+            loadingInterval = setInterval(() => {
+                progress += Math.random() * 8 + 4; // Slower, more elegant progress
+                if (progress > 100) {
+                    progress = 100;
+                    clearInterval(loadingInterval);
+
+                    // Add completion class
+                    document.querySelector('.loading-progress').classList.add('loading-complete');
+
+                    // Smooth fade out
+                    setTimeout(() => {
+                        const splashScreen = document.querySelector('.splash-screen');
+                        if (splashScreen) {
+                            splashScreen.style.opacity = '0';
+                            splashScreen.style.transition = 'opacity 0.8s ease';
+                            setTimeout(() => {
+                                splashScreen.style.display = 'none';
+                            }, 800);
+                        }
+                    }, 1000);
+                }
+                safeUpdateProgress();
+            }, 250);
+        }
+
+        // Start loading animation safely
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startLoadingAnimation);
+        } else {
+            startLoadingAnimation();
+        }
     </script>
+
     <!-- Scripts -->
     <script src="js/utils.js"></script>
     <script src="js/theme.js"></script>
@@ -848,6 +1198,7 @@
     <script src="js/billing-manager.js"></script>
     <script src="js/reports-manager.js"></script>
     <script src="js/export-manager.js"></script>
+    <script src="js/settings-manager.js"></script>
     <script src="js/app.js"></script>
 </body>
 
