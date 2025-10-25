@@ -48,14 +48,15 @@ class Utils {
     }
 
     static validateEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
     }
 
     static validatePhone(phone) {
-        const re = /^[6-9]\d{9}$/;
-        return re.test(phone.replace(/\D/g, ''));
+        const phoneRegex = /^[6-9]\d{9}$/;
+        return phoneRegex.test(phone.replace(/\D/g, ''));
     }
+
 
     static showLoading(message = 'Loading...') {
         const loading = document.getElementById('loadingOverlay');
@@ -123,21 +124,21 @@ class Utils {
             try {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
+
                 // Add title
                 doc.setFontSize(16);
                 doc.setTextColor(40);
                 doc.text(title, 14, 15);
-                
+
                 // Add generation date
                 doc.setFontSize(10);
                 doc.setTextColor(100);
                 doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 22);
-                
+
                 if (data && data.length > 0) {
                     const headers = Object.keys(data[0]);
                     const tableData = data.map(row => headers.map(header => row[header] || ''));
-                    
+
                     doc.autoTable({
                         head: [headers],
                         body: tableData,
@@ -148,7 +149,7 @@ class Utils {
                 } else {
                     doc.text('No data available', 14, 30);
                 }
-                
+
                 doc.save(`${filename}_${new Date().toISOString().split('T')[0]}.pdf`);
                 resolve();
             } catch (error) {
@@ -159,9 +160,8 @@ class Utils {
 
     static sanitizeInput(input) {
         if (typeof input !== 'string') return input;
-        return input.replace(/[<>]/g, '').trim();
+        return input.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
     }
-
     static formatNumber(number) {
         return new Intl.NumberFormat('en-IN').format(number);
     }
@@ -187,6 +187,8 @@ class Utils {
         if (typeof obj === 'object') return Object.keys(obj).length === 0;
         return false;
     }
+
+
 }
 
 // Make Utils available globally

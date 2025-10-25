@@ -7,17 +7,35 @@ class BillingManager {
         this.customers = [];
         this.bills = [];
         this.payments = [];
+        this.advancePayments = [];
         this.products = [];
         this.customProducts = [];
         this.selectedCustomer = null;
         this.editingBillId = null;
+
+        // Bind methods to maintain context
+        this.showAddAdvanceModal = this.showAddAdvanceModal.bind(this);
+        this.handleAdvancePaymentSubmit = this.handleAdvancePaymentSubmit.bind(this);
+        this.editCustomer = this.editCustomer.bind(this);
+        this.addSaleToCustomer = this.addSaleToCustomer.bind(this);
+        this.closeCustomerDetails = this.closeCustomerDetails.bind(this);
     }
 
     async initialize() {
         await this.loadProducts();
         this.loadCustomProducts();
+        await this.loadAdvancePayments();
         this.setupEventListeners();
         return Promise.resolve();
+    }
+
+    async loadAdvancePayments() {
+        try {
+            this.advancePayments = await this.db.getAdvancePayments() || [];
+        } catch (error) {
+            console.error('Error loading advance payments:', error);
+            this.advancePayments = [];
+        }
     }
 
     async loadProducts() {
@@ -118,7 +136,7 @@ class BillingManager {
                 customerForm.addEventListener('submit', (e) => this.handleCustomerSubmit(e));
             }
 
-            // Export buttons - show export options modal
+            // Export buttons
             const exportBillsBtn = document.getElementById('exportBillsBtn');
             if (exportBillsBtn) {
                 exportBillsBtn.addEventListener('click', () => this.showExportOptions('bills'));
@@ -153,10 +171,8 @@ class BillingManager {
         const currentUser = this.auth.getCurrentUser();
         if (!currentUser) return false;
 
-        // Admin can edit any bill
         if (currentUser.role === 'admin') return true;
 
-        // Supervisor can only edit last bill (most recent)
         if (currentUser.role === 'supervisor') {
             const sortedBills = [...this.bills].sort((a, b) =>
                 new Date(b.created_at) - new Date(a.created_at)
@@ -166,6 +182,29 @@ class BillingManager {
         }
 
         return false;
+    }
+
+    // Calculate customer balance
+    calculateCustomerBalance(customer) {
+        const customerBills = this.bills.filter(bill => 
+            bill.customer_phone === customer.phone && bill.status === 'pending'
+        );
+        const totalPending = customerBills.reduce((sum, bill) => sum + bill.total_amount, 0);
+        
+        const customerAdvances = this.advancePayments.filter(adv => 
+            adv.customer_phone === customer.phone
+        );
+        const totalAdvance = customerAdvances.reduce((sum, adv) => sum + adv.amount, 0);
+        
+        return totalAdvance - totalPending;
+    }
+
+    // Format balance with color
+    formatBalance(balance) {
+        const isPositive = balance >= 0;
+        const color = isPositive ? '#10b981' : '#ef4444';
+        const sign = isPositive ? '+' : '';
+        return `<span style="color: ${color}; font-weight: bold;">${sign}${Utils.formatCurrency(balance)}</span>`;
     }
 
     showAddBillModal(customer = null) {
@@ -191,10 +230,15 @@ class BillingManager {
             document.getElementById('customerName').value = customer.name;
             document.getElementById('customerPhone').value = customer.phone || '';
             document.getElementById('customerEmail').value = customer.email || '';
+            
+            // Show customer balance
+            const balance = this.calculateCustomerBalance(customer);
+            this.showCustomerBalance(balance);
         } else {
             document.getElementById('customerName').value = '';
             document.getElementById('customerPhone').value = '';
             document.getElementById('customerEmail').value = '';
+            this.hideCustomerBalance();
         }
 
         // Reset customer search
@@ -205,6 +249,40 @@ class BillingManager {
         document.getElementById('billModalTitle').textContent = 'Add Bill';
     }
 
+    // Show customer balance in bill modal
+    showCustomerBalance(balance) {
+        let balanceDisplay = document.getElementById('customerBalanceDisplay');
+        
+        // Create balance display if it doesn't exist
+        if (!balanceDisplay) {
+            const customerSection = document.querySelector('.form-section h4');
+            if (customerSection) {
+                balanceDisplay = document.createElement('div');
+                balanceDisplay.id = 'customerBalanceDisplay';
+                balanceDisplay.className = 'customer-balance-display';
+                customerSection.parentNode.insertBefore(balanceDisplay, customerSection.nextSibling);
+            }
+        }
+        
+        if (balanceDisplay) {
+            balanceDisplay.innerHTML = `
+                <div class="balance-info">
+                    <strong>Customer Balance:</strong>
+                    ${this.formatBalance(balance)}
+                </div>
+            `;
+            balanceDisplay.style.display = 'block';
+        }
+    }
+
+    // Hide customer balance
+    hideCustomerBalance() {
+        const balanceDisplay = document.getElementById('customerBalanceDisplay');
+        if (balanceDisplay) {
+            balanceDisplay.style.display = 'none';
+        }
+    }
+
     async editBill(billId) {
         try {
             const bill = this.bills.find(b => b.id === billId);
@@ -213,7 +291,6 @@ class BillingManager {
                 return;
             }
 
-            // Check permissions
             if (!this.canEditBill(bill)) {
                 this.ui.showToast('You do not have permission to edit this bill', 'error');
                 return;
@@ -246,6 +323,15 @@ class BillingManager {
             document.getElementById('customerEmail').value = bill.customer_email || '';
             document.getElementById('billGst').value = bill.gst_rate;
 
+            // Show customer balance
+            const customer = this.customers.find(c => c.phone === bill.customer_phone);
+            if (customer) {
+                const balance = this.calculateCustomerBalance(customer);
+                this.showCustomerBalance(balance);
+            } else {
+                this.hideCustomerBalance();
+            }
+
             this.renderBillItems();
             this.calculateBillTotal();
             document.getElementById('billModalTitle').textContent = 'Edit Bill';
@@ -256,7 +342,7 @@ class BillingManager {
         }
     }
 
-    // Customer Management with Add Sale option
+    // Enhanced Customer Details with Advance Payments - FIXED MODAL SYSTEM
     async showCustomerDetails(customerId) {
         try {
             const customer = this.customers.find(c => c.id === customerId);
@@ -265,92 +351,308 @@ class BillingManager {
                 return;
             }
 
-            // Get customer's bills
+            // Get customer's bills and advance payments
             const customerBills = this.bills.filter(bill =>
-                bill.customer_phone === customer.phone ||
-                bill.customer_name === customer.name
+                bill.customer_phone === customer.phone
+            );
+            
+            const customerAdvances = this.advancePayments.filter(adv =>
+                adv.customer_phone === customer.phone
             );
 
+            const balance = this.calculateCustomerBalance(customer);
+            const totalAdvance = customerAdvances.reduce((sum, adv) => sum + adv.amount, 0);
+            const totalPending = customerBills.filter(b => b.status === 'pending')
+                .reduce((sum, bill) => sum + bill.total_amount, 0);
+
             const modalHtml = `
-                <div id="customerDetailsModal" class="modal">
-                    <div class="modal-content" style="max-width: 700px;">
-                        <div class="modal-header">
-                            <h3><i class="fas fa-user"></i> ${customer.name}</h3>
-                            <button class="modal-close">&times;</button>
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-user"></i> ${customer.name}</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="customer-details">
+                        <div class="detail-row">
+                            <label>Phone:</label>
+                            <span>${customer.phone || 'N/A'}</span>
                         </div>
-                        
-                        <div class="customer-details">
-                            <div class="detail-row">
-                                <label>Phone:</label>
-                                <span>${customer.phone || 'N/A'}</span>
-                            </div>
-                            <div class="detail-row">
-                                <label>Email:</label>
-                                <span>${customer.email || 'N/A'}</span>
-                            </div>
-                            <div class="detail-row">
-                                <label>Total Bills:</label>
-                                <span>${customer.total_bills || 0}</span>
-                            </div>
-                            <div class="detail-row">
-                                <label>Total Amount:</label>
-                                <span>${Utils.formatCurrency(customer.total_amount || 0)}</span>
-                            </div>
+                        <div class="detail-row">
+                            <label>Email:</label>
+                            <span>${customer.email || 'N/A'}</span>
                         </div>
+                        <div class="detail-row">
+                            <label>Address:</label>
+                            <span>${customer.address || 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <label>Total Bills:</label>
+                            <span>${customerBills.length}</span>
+                        </div>
+                        <div class="detail-row">
+                            <label>Total Advance:</label>
+                            <span style="color: #10b981;">${Utils.formatCurrency(totalAdvance)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <label>Pending Bills:</label>
+                            <span style="color: #ef4444;">${Utils.formatCurrency(totalPending)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <label>Current Balance:</label>
+                            <span>${this.formatBalance(balance)}</span>
+                        </div>
+                    </div>
 
-                        <div class="customer-actions" style="margin: 1.5rem 0;">
-                            <button class="btn-primary" onclick="app.getManagers().billing.addSaleToCustomer('${customer.id}')">
-                                <i class="fas fa-plus"></i> Add New Sale
-                            </button>
-                            <button class="btn-secondary" onclick="app.getManagers().billing.editCustomer('${customer.id}')">
-                                <i class="fas fa-edit"></i> Edit Customer
-                            </button>
-                        </div>
+                    <div class="customer-actions" style="margin: 1.5rem 0; display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn-primary" id="addSaleBtn">
+                            <i class="fas fa-plus"></i> Add New Sale
+                        </button>
+                        <button class="btn-secondary" id="addAdvanceBtn">
+                            <i class="fas fa-money-bill-wave"></i> Add Advance
+                        </button>
+                        <button class="btn-secondary" id="editCustomerBtn">
+                            <i class="fas fa-edit"></i> Edit Customer
+                        </button>
+                    </div>
 
-                        <div class="customer-bills">
-                            <h4>Recent Bills</h4>
-                            ${customerBills.length === 0 ?
-                    '<p class="no-data">No bills found</p>' :
-                    `<div class="bills-list">
-                                    ${customerBills.slice(0, 5).map(bill => `
-                                        <div class="bill-item-summary">
-                                            <div class="bill-info">
-                                                <strong>${bill.bill_number}</strong>
-                                                <span>${Utils.formatDate(bill.bill_date)}</span>
-                                            </div>
-                                            <div class="bill-amount">
-                                                ${Utils.formatCurrency(bill.total_amount)}
-                                                <span class="status-${bill.status}">${bill.status}</span>
-                                            </div>
-                                            <div class="bill-actions">
-                                                <button class="btn-icon" onclick="app.getManagers().billing.viewBill('${bill.id}')">
-                                                    <i class="fas fa-eye"></i>
-                                                </button>
-                                                ${this.canEditBill(bill) ? `
-                                                    <button class="btn-icon" onclick="app.getManagers().billing.editBill('${bill.id}')">
-                                                        <i class="fas fa-edit"></i>
-                                                    </button>
-                                                ` : ''}
-                                            </div>
+                    <!-- Advance Payments Section -->
+                    <div class="customer-section">
+                        <h4><i class="fas fa-money-bill-wave"></i> Advance Payments</h4>
+                        ${customerAdvances.length === 0 ?
+                            '<p class="no-data">No advance payments</p>' :
+                            `<div class="advance-list">
+                                ${customerAdvances.map(advance => `
+                                    <div class="advance-item">
+                                        <div class="advance-info">
+                                            <strong>${Utils.formatCurrency(advance.amount)}</strong>
+                                            <span>${Utils.formatDate(advance.payment_date)}</span>
                                         </div>
-                                    `).join('')}
-                                </div>`
-                }
-                        </div>
+                                        <div class="advance-notes">
+                                            ${advance.notes || 'No notes'}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>`
+                        }
+                    </div>
 
-                        <div class="modal-actions">
-                            <button class="btn-secondary" onclick="app.getManagers().billing.closeCustomerDetails()">
-                                Close
-                            </button>
-                        </div>
+                    <!-- Recent Bills Section -->
+                    <div class="customer-section">
+                        <h4><i class="fas fa-file-invoice"></i> Recent Bills</h4>
+                        ${customerBills.length === 0 ?
+                            '<p class="no-data">No bills found</p>' :
+                            `<div class="bills-list">
+                                ${customerBills.slice(0, 10).map(bill => `
+                                    <div class="bill-item-summary">
+                                        <div class="bill-info">
+                                            <strong>${bill.bill_number}</strong>
+                                            <span>${Utils.formatDate(bill.bill_date)}</span>
+                                        </div>
+                                        <div class="bill-amount">
+                                            ${Utils.formatCurrency(bill.total_amount)}
+                                            <span class="status-${bill.status}">${bill.status}</span>
+                                        </div>
+                                        <div class="bill-actions">
+                                            <button class="btn-icon view-bill-btn" data-bill-id="${bill.id}">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            ${this.canEditBill(bill) ? `
+                                                <button class="btn-icon edit-bill-btn" data-bill-id="${bill.id}">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>`
+                        }
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" id="closeCustomerDetailsBtn">
+                            Close
+                        </button>
                     </div>
                 </div>
             `;
 
-            this.showCustomModal(modalHtml, 'customerDetailsModal');
+            // Use the existing UI manager to show modal
+            this.ui.showCustomModal('customerDetailsModal', modalHtml);
+            
+            // Add event listeners after modal is shown
+            setTimeout(() => {
+                // Store customer ID in buttons for reference
+                const addSaleBtn = document.getElementById('addSaleBtn');
+                const addAdvanceBtn = document.getElementById('addAdvanceBtn');
+                const editCustomerBtn = document.getElementById('editCustomerBtn');
+                const closeBtn = document.getElementById('closeCustomerDetailsBtn');
+
+                if (addSaleBtn) {
+                    addSaleBtn.setAttribute('data-customer-id', customer.id);
+                    addSaleBtn.addEventListener('click', () => this.addSaleToCustomer(customer.id));
+                }
+
+                if (addAdvanceBtn) {
+                    addAdvanceBtn.setAttribute('data-customer-id', customer.id);
+                    addAdvanceBtn.addEventListener('click', () => this.showAddAdvanceModal(customer.id));
+                }
+
+                if (editCustomerBtn) {
+                    editCustomerBtn.setAttribute('data-customer-id', customer.id);
+                    editCustomerBtn.addEventListener('click', () => this.editCustomer(customer.id));
+                }
+
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => this.closeCustomerDetails());
+                }
+
+                // Add event listeners for bill buttons
+                document.querySelectorAll('.view-bill-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const billId = e.currentTarget.getAttribute('data-bill-id');
+                        this.viewBill(billId);
+                    });
+                });
+
+                document.querySelectorAll('.edit-bill-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const billId = e.currentTarget.getAttribute('data-bill-id');
+                        this.editBill(billId);
+                    });
+                });
+
+            }, 100);
+
         } catch (error) {
             console.error('Error showing customer details:', error);
             this.ui.showToast('Error loading customer details', 'error');
+        }
+    }
+
+    // Add Advance Payment Modal - FIXED TO USE UI MANAGER
+    showAddAdvanceModal(customerId) {
+        const customer = this.customers.find(c => c.id === customerId);
+        if (!customer) {
+            this.ui.showToast('Customer not found', 'error');
+            return;
+        }
+
+        const modalHtml = `
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-money-bill-wave"></i> Add Advance Payment</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                
+                <form id="advancePaymentForm">
+                    <div class="form-group">
+                        <label>Customer</label>
+                        <input type="text" value="${customer.name} (${customer.phone})" readonly class="form-control">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Amount (₹) *</label>
+                        <input type="number" id="advanceAmount" step="0.01" min="1" required class="form-control" placeholder="Enter amount">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Payment Date *</label>
+                        <input type="date" id="advanceDate" required class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Payment Method</label>
+                        <select id="advanceMethod" class="form-control">
+                            <option value="cash">Cash</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="upi">UPI</option>
+                            <option value="cheque">Cheque</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Notes (Optional)</label>
+                        <textarea id="advanceNotes" class="form-control" placeholder="Add any notes about this payment"></textarea>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="cancelAdvanceBtn">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn-primary">
+                            <i class="fas fa-save"></i> Save Advance
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        this.ui.showCustomModal('advancePaymentModal', modalHtml);
+        
+        // Add event listeners after modal is shown
+        setTimeout(() => {
+            const form = document.getElementById('advancePaymentForm');
+            const cancelBtn = document.getElementById('cancelAdvanceBtn');
+
+            if (form) {
+                form.addEventListener('submit', (e) => this.handleAdvancePaymentSubmit(e, customer));
+            }
+
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => this.closeAdvanceModal());
+            }
+        }, 100);
+    }
+
+    closeAdvanceModal() {
+        this.ui.hideModal('advancePaymentModal');
+    }
+
+    async handleAdvancePaymentSubmit(e, customer) {
+        e.preventDefault();
+
+        const button = e.target.querySelector('button[type="submit"]');
+        const resetButton = this.ui.showButtonLoading(button, 'Saving Advance...');
+
+        try {
+            const amount = parseFloat(document.getElementById('advanceAmount').value);
+            const paymentDate = document.getElementById('advanceDate').value;
+            const paymentMethod = document.getElementById('advanceMethod').value;
+            const notes = document.getElementById('advanceNotes').value;
+
+            if (!amount || amount <= 0) {
+                this.ui.showToast('Please enter a valid amount', 'error');
+                return;
+            }
+
+            const advanceData = {
+                customer_id: customer.id,
+                customer_name: customer.name,
+                customer_phone: customer.phone,
+                amount: amount,
+                payment_date: paymentDate,
+                payment_method: paymentMethod,
+                notes: notes ? Utils.sanitizeInput(notes) : null,
+                created_at: new Date().toISOString()
+            };
+
+            await this.db.create('advance_payments', advanceData);
+            
+            this.ui.showToast('Advance payment added successfully', 'success');
+            this.closeAdvanceModal();
+            await this.loadAdvancePayments();
+            
+            // Refresh customer details if open
+            if (document.getElementById('customerDetailsModal')) {
+                this.closeCustomerDetails();
+                await this.showCustomerDetails(customer.id);
+            }
+
+        } catch (error) {
+            console.error('Error saving advance payment:', error);
+            this.ui.showToast('Error saving advance payment: ' + error.message, 'error');
+        } finally {
+            resetButton();
         }
     }
 
@@ -364,39 +666,6 @@ class BillingManager {
 
     closeCustomerDetails() {
         this.ui.hideModal('customerDetailsModal');
-    }
-
-    showCustomModal(html, modalId) {
-        // Remove existing modal
-        const existingModal = document.getElementById(modalId);
-        if (existingModal) {
-            existingModal.remove();
-        }
-
-        // Create new modal
-        const modal = document.createElement('div');
-        modal.id = modalId;
-        modal.innerHTML = html;
-        document.body.appendChild(modal);
-
-        // Show modal
-        modal.style.display = 'flex';
-
-        // Add close handlers
-        const closeBtn = modal.querySelector('.modal-close');
-        if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-                modal.remove();
-            });
-        }
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-
-        return modal;
     }
 
     // Simplified Bill Items - Manual Price Input
@@ -664,6 +933,34 @@ class BillingManager {
                 return;
             }
 
+            // Validate phone format
+            if (!Utils.validatePhone(customerPhone)) {
+                this.ui.showToast('Please enter a valid 10-digit phone number', 'error');
+                return;
+            }
+
+            // Check for duplicate customer phone - AUTO CREATE CUSTOMER IF NOT EXISTS
+            if (!this.editingBillId) {
+                const existingCustomer = this.customers.find(c => c.phone === customerPhone);
+                if (!existingCustomer) {
+                    // Auto-create customer if doesn't exist
+                    try {
+                        const customerData = {
+                            name: Utils.sanitizeInput(customerName),
+                            phone: Utils.sanitizeInput(customerPhone),
+                            email: customerEmail ? Utils.sanitizeInput(customerEmail) : null,
+                            created_at: new Date().toISOString()
+                        };
+                        await this.db.create('customers', customerData);
+                        this.ui.showToast(`New customer "${customerName}" created automatically`, 'success');
+                        await this.loadCustomers(); // Reload customers to get the new one
+                    } catch (error) {
+                        console.error('Error auto-creating customer:', error);
+                        // Continue with bill creation even if customer creation fails
+                    }
+                }
+            }
+
             // Validate all items
             for (const item of this.billItems) {
                 if (!item.product_id && !item.is_custom) {
@@ -727,11 +1024,9 @@ class BillingManager {
             };
 
             if (this.editingBillId) {
-                // Update existing bill
                 await this.db.update('bills', this.editingBillId, billData);
                 this.ui.showToast('Bill updated successfully', 'success');
             } else {
-                // Create new bill
                 await this.db.create('bills', billData);
                 this.ui.showToast('Bill created successfully', 'success');
             }
@@ -759,51 +1054,68 @@ class BillingManager {
         };
 
         const exportHtml = `
-            <div id="exportModal" class="modal">
-                <div class="modal-content" style="max-width: 500px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-download"></i> Export ${titles[type]}</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    
-                    <div class="export-options">
-                        <div class="export-option" onclick="app.getManagers().billing.exportToExcel('${type}')">
-                            <div class="export-icon excel">
-                                <i class="fas fa-file-excel"></i>
-                            </div>
-                            <div class="export-info">
-                                <h4>Export to Excel</h4>
-                                <p>Download as .xlsx file for data analysis</p>
-                            </div>
-                            <div class="export-arrow">
-                                <i class="fas fa-chevron-right"></i>
-                            </div>
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> Export ${titles[type]}</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                
+                <div class="export-options">
+                    <div class="export-option" data-export-type="excel" data-data-type="${type}">
+                        <div class="export-icon excel">
+                            <i class="fas fa-file-excel"></i>
                         </div>
-                        
-                        <div class="export-option" onclick="app.getManagers().billing.exportToPDF('${type}')">
-                            <div class="export-icon pdf">
-                                <i class="fas fa-file-pdf"></i>
-                            </div>
-                            <div class="export-info">
-                                <h4>Export to PDF</h4>
-                                <p>Download as .pdf file for reporting</p>
-                            </div>
-                            <div class="export-arrow">
-                                <i class="fas fa-chevron-right"></i>
-                            </div>
+                        <div class="export-info">
+                            <h4>Export to Excel</h4>
+                            <p>Download as .xlsx file for data analysis</p>
+                        </div>
+                        <div class="export-arrow">
+                            <i class="fas fa-chevron-right"></i>
                         </div>
                     </div>
                     
-                    <div class="modal-actions">
-                        <button class="btn-secondary" onclick="app.getManagers().billing.closeExportModal()">
-                            Cancel
-                        </button>
+                    <div class="export-option" data-export-type="pdf" data-data-type="${type}">
+                        <div class="export-icon pdf">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <div class="export-info">
+                            <h4>Export to PDF</h4>
+                            <p>Download as .pdf file for reporting</p>
+                        </div>
+                        <div class="export-arrow">
+                            <i class="fas fa-chevron-right"></i>
+                        </div>
                     </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="closeExportModalBtn">
+                        Cancel
+                    </button>
                 </div>
             </div>
         `;
 
-        this.showCustomModal(exportHtml, 'exportModal');
+        this.ui.showCustomModal('exportModal', exportHtml);
+        
+        // Add event listeners
+        setTimeout(() => {
+            const excelOption = document.querySelector('[data-export-type="excel"]');
+            const pdfOption = document.querySelector('[data-export-type="pdf"]');
+            const closeBtn = document.getElementById('closeExportModalBtn');
+
+            if (excelOption) {
+                excelOption.addEventListener('click', () => this.exportToExcel(type));
+            }
+
+            if (pdfOption) {
+                pdfOption.addEventListener('click', () => this.exportToPDF(type));
+            }
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.closeExportModal());
+            }
+        }, 100);
     }
 
     closeExportModal() {
@@ -834,7 +1146,7 @@ class BillingManager {
         this.ui.showToast('PDF export feature coming soon', 'info');
     }
 
-    // Enhanced View Bill with Styled Modal
+    // Enhanced View Bill with Balance Information
     async viewBill(billId) {
         try {
             const bill = this.bills.find(b => b.id === billId);
@@ -844,116 +1156,151 @@ class BillingManager {
             }
 
             const items = typeof bill.items === 'string' ? JSON.parse(bill.items) : bill.items;
+            const customer = this.customers.find(c => c.phone === bill.customer_phone);
+            const balance = customer ? this.calculateCustomerBalance(customer) : 0;
 
             const modalHtml = `
-                <div id="viewBillModal" class="modal">
-                    <div class="modal-content" style="max-width: 800px;">
-                        <div class="modal-header">
-                            <h3><i class="fas fa-file-invoice"></i> Bill Details - ${bill.bill_number}</h3>
-                            <button class="modal-close">&times;</button>
-                        </div>
-                        
-                        <div class="bill-view">
-                            <!-- Bill Header -->
-                            <div class="bill-header">
-                                <div class="bill-info">
-                                    <div class="info-row">
-                                        <label>Bill Number:</label>
-                                        <span>${bill.bill_number}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <label>Date:</label>
-                                        <span>${Utils.formatDate(bill.bill_date)}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <label>Status:</label>
-                                        <span class="status-badge status-${bill.status}">${bill.status}</span>
-                                    </div>
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-file-invoice"></i> Bill Details - ${bill.bill_number}</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="bill-view">
+                        <!-- Bill Header -->
+                        <div class="bill-header">
+                            <div class="bill-info">
+                                <div class="info-row">
+                                    <label>Bill Number:</label>
+                                    <span>${bill.bill_number}</span>
                                 </div>
-                                <div class="customer-info">
-                                    <div class="info-row">
-                                        <label>Customer:</label>
-                                        <span>${bill.customer_name}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <label>Phone:</label>
-                                        <span>${bill.customer_phone || 'N/A'}</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <label>Email:</label>
-                                        <span>${bill.customer_email || 'N/A'}</span>
-                                    </div>
+                                <div class="info-row">
+                                    <label>Date:</label>
+                                    <span>${Utils.formatDate(bill.bill_date)}</span>
+                                </div>
+                                <div class="info-row">
+                                    <label>Status:</label>
+                                    <span class="status-badge status-${bill.status}">${bill.status}</span>
                                 </div>
                             </div>
+                            <div class="customer-info">
+                                <div class="info-row">
+                                    <label>Customer:</label>
+                                    <span>${bill.customer_name}</span>
+                                </div>
+                                <div class="info-row">
+                                    <label>Phone:</label>
+                                    <span>${bill.customer_phone || 'N/A'}</span>
+                                </div>
+                                <div class="info-row">
+                                    <label>Email:</label>
+                                    <span>${bill.customer_email || 'N/A'}</span>
+                                </div>
+                                <div class="info-row">
+                                    <label>Customer Balance:</label>
+                                    <span>${this.formatBalance(balance)}</span>
+                                </div>
+                            </div>
+                        </div>
 
-                            <!-- Bill Items Table -->
-                            <div class="bill-items-table">
-                                <table class="items-table">
-                                    <thead>
+                        <!-- Bill Items Table -->
+                        <div class="bill-items-table">
+                            <table class="items-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${items.map(item => `
                                         <tr>
-                                            <th>Product</th>
-                                            <th>Quantity</th>
-                                            <th>Price</th>
-                                            <th>Amount</th>
+                                            <td>${item.product_name || item.description}</td>
+                                            <td>${item.quantity}</td>
+                                            <td>${Utils.formatCurrency(item.price)}</td>
+                                            <td>${Utils.formatCurrency(item.amount)}</td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${items.map(item => `
-                                            <tr>
-                                                <td>${item.product_name || item.description}</td>
-                                                <td>${item.quantity}</td>
-                                                <td>${Utils.formatCurrency(item.price)}</td>
-                                                <td>${Utils.formatCurrency(item.amount)}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
 
-                            <!-- Bill Summary -->
-                            <div class="bill-summary-view">
-                                <div class="summary-row">
-                                    <span>Sub Total:</span>
-                                    <span>${Utils.formatCurrency(bill.sub_total)}</span>
-                                </div>
-                                <div class="summary-row">
-                                    <span>GST (${bill.gst_rate}%):</span>
-                                    <span>${Utils.formatCurrency(bill.gst_amount)}</span>
-                                </div>
-                                <div class="summary-row total">
-                                    <span>Total Amount:</span>
-                                    <span>${Utils.formatCurrency(bill.total_amount)}</span>
-                                </div>
+                        <!-- Bill Summary -->
+                        <div class="bill-summary-view">
+                            <div class="summary-row">
+                                <span>Sub Total:</span>
+                                <span>${Utils.formatCurrency(bill.sub_total)}</span>
                             </div>
-
-                            <!-- Bill Actions -->
-                            <div class="bill-actions-view">
-                                ${this.canEditBill(bill) ? `
-                                    <button class="btn-primary" onclick="app.getManagers().billing.editBill('${bill.id}')">
-                                        <i class="fas fa-edit"></i> Edit Bill
-                                    </button>
-                                ` : ''}
-                                ${bill.status === 'pending' ? `
-                                    <button class="btn-secondary" onclick="app.getManagers().billing.markAsPaid('${bill.id}')">
-                                        <i class="fas fa-check"></i> Mark as Paid
-                                    </button>
-                                ` : ''}
-                                <button class="btn-secondary" onclick="app.getManagers().billing.printBill('${bill.id}')">
-                                    <i class="fas fa-print"></i> Print
-                                </button>
+                            <div class="summary-row">
+                                <span>GST (${bill.gst_rate}%):</span>
+                                <span>${Utils.formatCurrency(bill.gst_amount)}</span>
+                            </div>
+                            <div class="summary-row total">
+                                <span>Total Amount:</span>
+                                <span>${Utils.formatCurrency(bill.total_amount)}</span>
                             </div>
                         </div>
 
-                        <div class="modal-actions">
-                            <button class="btn-secondary" onclick="app.getManagers().billing.closeViewBill()">
-                                Close
+                        <!-- Bill Actions -->
+                        <div class="bill-actions-view">
+                            ${this.canEditBill(bill) ? `
+                                <button class="btn-primary" id="editBillBtn">
+                                    <i class="fas fa-edit"></i> Edit Bill
+                                </button>
+                            ` : ''}
+                            ${bill.status === 'pending' ? `
+                                <button class="btn-secondary" id="markPaidBtn">
+                                    <i class="fas fa-check"></i> Mark as Paid
+                                </button>
+                            ` : ''}
+                            <button class="btn-secondary" id="printBillBtn">
+                                <i class="fas fa-print"></i> Print
                             </button>
                         </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" id="closeViewBillBtn">
+                            Close
+                        </button>
                     </div>
                 </div>
             `;
 
-            this.showCustomModal(modalHtml, 'viewBillModal');
+            this.ui.showCustomModal('viewBillModal', modalHtml);
+            
+            // Add event listeners
+            setTimeout(() => {
+                const editBtn = document.getElementById('editBillBtn');
+                const markPaidBtn = document.getElementById('markPaidBtn');
+                const printBtn = document.getElementById('printBillBtn');
+                const closeBtn = document.getElementById('closeViewBillBtn');
+
+                if (editBtn) {
+                    editBtn.addEventListener('click', () => {
+                        this.ui.hideModal('viewBillModal');
+                        this.editBill(billId);
+                    });
+                }
+
+                if (markPaidBtn) {
+                    markPaidBtn.addEventListener('click', () => {
+                        this.ui.hideModal('viewBillModal');
+                        this.markAsPaid(billId);
+                    });
+                }
+
+                if (printBtn) {
+                    printBtn.addEventListener('click', () => this.printBill(billId));
+                }
+
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => this.closeViewBill());
+                }
+            }, 100);
+
         } catch (error) {
             console.error('Error viewing bill:', error);
             this.ui.showToast('Error viewing bill details', 'error');
@@ -965,11 +1312,10 @@ class BillingManager {
     }
 
     printBill(billId) {
-        // Simple print functionality
         window.print();
     }
 
-    // Update renderBillsTable to include edit buttons and customer click
+    // Update renderBillsTable to include balance information
     renderBillsTable(bills) {
         const tbody = document.getElementById('billsTableBody');
         if (!tbody) return;
@@ -977,7 +1323,7 @@ class BillingManager {
         if (bills.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="7" class="no-data">
+                    <td colspan="8" class="no-data">
                         <i class="fas fa-file-invoice"></i>
                         <br>No bills found
                     </td>
@@ -986,7 +1332,11 @@ class BillingManager {
             return;
         }
 
-        tbody.innerHTML = bills.map(bill => `
+        tbody.innerHTML = bills.map(bill => {
+            const customer = this.customers.find(c => c.phone === bill.customer_phone);
+            const balance = customer ? this.calculateCustomerBalance(customer) : 0;
+            
+            return `
             <tr>
                 <td>${bill.bill_number || 'N/A'}</td>
                 <td>
@@ -1002,6 +1352,7 @@ class BillingManager {
                 <td>
                     <span class="status-badge status-${bill.status}">${bill.status}</span>
                 </td>
+                <td>${this.formatBalance(balance)}</td>
                 <td>
                     <div class="action-buttons">
                         <button class="btn-icon" onclick="app.getManagers().billing.viewBill('${bill.id}')" title="View Bill">
@@ -1023,16 +1374,13 @@ class BillingManager {
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
     }
 
     async showCustomerByBill(billId) {
         const bill = this.bills.find(b => b.id === billId);
         if (bill) {
-            // Find customer by phone or name
-            const customer = this.customers.find(c =>
-                c.phone === bill.customer_phone || c.name === bill.customer_name
-            );
+            const customer = this.customers.find(c => c.phone === bill.customer_phone);
             if (customer) {
                 await this.showCustomerDetails(customer.id);
             } else {
@@ -1041,7 +1389,7 @@ class BillingManager {
         }
     }
 
-    // Customer search functionality
+    // Enhanced Customer search functionality
     async handleCustomerSearch(query) {
         if (!query || query.length < 2) {
             this.hideCustomerResults();
@@ -1049,8 +1397,11 @@ class BillingManager {
         }
 
         try {
-            const customers = await this.db.searchCustomers(query);
-            this.showCustomerResults(customers);
+            const filteredCustomers = this.customers.filter(customer =>
+                customer.name.toLowerCase().includes(query.toLowerCase()) ||
+                customer.phone.includes(query)
+            );
+            this.showCustomerResults(filteredCustomers);
         } catch (error) {
             console.error('Error searching customers:', error);
         }
@@ -1063,21 +1414,34 @@ class BillingManager {
         if (customers.length === 0) {
             resultsContainer.innerHTML = '<div class="customer-result-item">No customers found</div>';
         } else {
-            resultsContainer.innerHTML = customers.map(customer => `
+            resultsContainer.innerHTML = customers.map(customer => {
+                const balance = this.calculateCustomerBalance(customer);
+                return `
                 <div class="customer-result-item" data-customer-id="${customer.id}">
                     <div class="customer-info">
                         <strong>${customer.name}</strong>
                         <span>${customer.phone}</span>
                         ${customer.email ? `<small>${customer.email}</small>` : ''}
+                        <div class="customer-balance">${this.formatBalance(balance)}</div>
                     </div>
-                    <button type="button" class="btn-secondary btn-sm" onclick="app.getManagers().billing.selectCustomer('${customer.id}')">
+                    <button type="button" class="btn-secondary btn-sm select-customer-btn" data-customer-id="${customer.id}">
                         Select
                     </button>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         resultsContainer.style.display = 'block';
+
+        // Add event listeners to select buttons
+        setTimeout(() => {
+            document.querySelectorAll('.select-customer-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const customerId = e.currentTarget.getAttribute('data-customer-id');
+                    this.selectCustomer(customerId);
+                });
+            });
+        }, 100);
     }
 
     hideCustomerResults() {
@@ -1095,6 +1459,11 @@ class BillingManager {
                 document.getElementById('customerName').value = customer.name;
                 document.getElementById('customerPhone').value = customer.phone || '';
                 document.getElementById('customerEmail').value = customer.email || '';
+                
+                // Show customer balance
+                const balance = this.calculateCustomerBalance(customer);
+                this.showCustomerBalance(balance);
+                
                 this.hideCustomerResults();
                 this.ui.showToast(`Customer ${customer.name} selected`, 'success');
             }
@@ -1104,7 +1473,7 @@ class BillingManager {
         }
     }
 
-    // Customer Management
+    // Customer Management with enhanced validation
     showAddCustomerModal() {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
             this.ui.showToast('Insufficient permissions to manage customers', 'error');
@@ -1169,8 +1538,22 @@ class BillingManager {
             return;
         }
 
+        if (!Utils.validatePhone(phone)) {
+            this.ui.showToast('Please enter a valid 10-digit phone number', 'error');
+            return;
+        }
+
         if (email && !Utils.validateEmail(email)) {
             this.ui.showToast('Please enter a valid email address', 'error');
+            return;
+        }
+
+        // Check for duplicate phone (excluding current customer when editing)
+        const existingCustomer = this.customers.find(c => 
+            c.phone === phone && c.id !== customerId
+        );
+        if (existingCustomer) {
+            this.ui.showToast(`Customer with phone ${phone} already exists`, 'error');
             return;
         }
 
@@ -1204,91 +1587,116 @@ class BillingManager {
         }
     }
 
-    async deleteCustomer(customerId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
-            this.ui.showToast('Insufficient permissions to delete customers', 'error');
+    // Enhanced renderCustomersTable with balance
+    renderCustomersTable(customers) {
+        const tbody = document.getElementById('customersTableBody');
+        if (!tbody) return;
+
+        if (customers.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="no-data">
+                        <i class="fas fa-user-friends"></i>
+                        <br>No customers found
+                    </td>
+                </tr>
+            `;
             return;
         }
 
-        const customer = this.customers.find(c => c.id === customerId);
-        if (!customer) {
-            this.ui.showToast('Customer not found', 'error');
-            return;
-        }
-
-        if (!confirm(`Are you sure you want to delete customer "${customer.name}"?`)) return;
-
-        try {
-            await this.db.delete('customers', customerId);
-            this.ui.showToast('Customer deleted successfully', 'success');
-            await this.loadCustomers();
-        } catch (error) {
-            console.error('Error deleting customer:', error);
-            this.ui.showToast('Error deleting customer: ' + error.message, 'error');
-        }
+        tbody.innerHTML = customers.map(customer => {
+            const balance = this.calculateCustomerBalance(customer);
+            const customerBills = this.bills.filter(bill => bill.customer_phone === customer.phone);
+            const pendingBills = customerBills.filter(bill => bill.status === 'pending');
+            
+            return `
+            <tr>
+                <td>
+                    <a href="javascript:void(0)" 
+                       onclick="app.getManagers().billing.showCustomerDetails('${customer.id}')"
+                       class="customer-link">
+                       ${customer.name}
+                    </a>
+                </td>
+                <td>${customer.phone || 'N/A'}</td>
+                <td>${customer.email || 'N/A'}</td>
+                <td>${customerBills.length}</td>
+                <td>${pendingBills.length}</td>
+                <td>${this.formatBalance(balance)}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn-icon" onclick="app.getManagers().billing.showCustomerDetails('${customer.id}')" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn-icon" onclick="app.getManagers().billing.editCustomer('${customer.id}')" title="Edit Customer">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon btn-danger" onclick="app.getManagers().billing.deleteCustomer('${customer.id}')" title="Delete Customer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `}).join('');
     }
 
-    // Add this method to your BillingManager class
+    // Confirmation Modal
     showConfirmationModal(title, message, confirmCallback, cancelCallback = null) {
         const modalHtml = `
-        <div id="confirmationModal" class="modal">
-            <div class="modal-content" style="max-width: 450px;">
-                <div class="modal-header">
-                    <h3><i class="fas fa-exclamation-triangle"></i> ${title}</h3>
-                    <button class="modal-close">&times;</button>
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> ${title}</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <div class="confirmation-body">
+                <div class="confirmation-icon">
+                    <i class="fas fa-question-circle"></i>
                 </div>
-                
-                <div class="confirmation-body">
-                    <div class="confirmation-icon">
-                        <i class="fas fa-question-circle"></i>
-                    </div>
-                    <div class="confirmation-message">
-                        <p>${message}</p>
-                    </div>
+                <div class="confirmation-message">
+                    <p>${message}</p>
                 </div>
+            </div>
 
-                <div class="confirmation-actions">
-                    <button class="btn-secondary" id="confirmCancelBtn">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                    <button class="btn-danger" id="confirmOkBtn">
-                        <i class="fas fa-check"></i> Confirm
-                    </button>
-                </div>
+            <div class="confirmation-actions">
+                <button class="btn-secondary" id="confirmCancelBtn">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="btn-danger" id="confirmOkBtn">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
             </div>
         </div>
     `;
 
-        const modal = this.showCustomModal(modalHtml, 'confirmationModal');
+        const modal = this.ui.showCustomModal('confirmationModal', modalHtml);
 
         // Add event listeners
-        const confirmBtn = document.getElementById('confirmOkBtn');
-        const cancelBtn = document.getElementById('confirmCancelBtn');
-        const closeBtn = modal.querySelector('.modal-close');
+        setTimeout(() => {
+            const confirmBtn = document.getElementById('confirmOkBtn');
+            const cancelBtn = document.getElementById('confirmCancelBtn');
 
-        const closeModal = () => {
-            modal.remove();
-            if (cancelCallback) cancelCallback();
-        };
+            const closeModal = () => {
+                this.ui.hideModal('confirmationModal');
+                if (cancelCallback) cancelCallback();
+            };
 
-        confirmBtn.addEventListener('click', () => {
-            modal.remove();
-            confirmCallback();
-        });
-
-        cancelBtn.addEventListener('click', closeModal);
-        closeBtn.addEventListener('click', closeModal);
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal();
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', () => {
+                    this.ui.hideModal('confirmationModal');
+                    confirmCallback();
+                });
             }
-        });
+
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', closeModal);
+            }
+        }, 100);
 
         return modal;
     }
 
-    // Update all delete methods to use custom confirmation
+    // Delete Customer with bill check
     async deleteCustomer(customerId) {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
             this.ui.showToast('Insufficient permissions to delete customers', 'error');
@@ -1298,6 +1706,13 @@ class BillingManager {
         const customer = this.customers.find(c => c.id === customerId);
         if (!customer) {
             this.ui.showToast('Customer not found', 'error');
+            return;
+        }
+
+        // Check if customer has bills
+        const customerBills = this.bills.filter(bill => bill.customer_phone === customer.phone);
+        if (customerBills.length > 0) {
+            this.ui.showToast('Cannot delete customer with existing bills', 'error');
             return;
         }
 
@@ -1371,23 +1786,20 @@ class BillingManager {
                 try {
                     this.ui.showLoading('Updating bill...');
 
-                    // Update bill status
                     await this.db.update('bills', billId, { status: 'paid' });
 
-                    // Create payment record
-                    if (bill) {
-                        const paymentData = {
-                            bill_id: billId,
-                            bill_number: bill.bill_number,
-                            customer_name: bill.customer_name,
-                            amount: bill.total_amount,
-                            payment_method: 'cash',
-                            payment_date: new Date().toISOString().split('T')[0],
-                            created_at: new Date().toISOString()
-                        };
+                    const paymentData = {
+                        bill_id: billId,
+                        bill_number: bill.bill_number,
+                        customer_name: bill.customer_name,
+                        customer_phone: bill.customer_phone,
+                        amount: bill.total_amount,
+                        payment_method: 'cash',
+                        payment_date: new Date().toISOString().split('T')[0],
+                        created_at: new Date().toISOString()
+                    };
 
-                        await this.db.create('payments', paymentData);
-                    }
+                    await this.db.create('payments', paymentData);
 
                     this.ui.showToast('Bill marked as paid', 'success');
                     await this.loadBills();
@@ -1412,12 +1824,12 @@ class BillingManager {
             }
 
             this.ui.showSectionLoading('billingContent', 'Loading bills...');
-            this.bills = await this.db.getBills();
+            this.bills = await this.db.getBills() || [];
             this.renderBillsTable(this.bills);
-            this.ui.showToast('Bills loaded successfully', 'success');
         } catch (error) {
             console.error('Error loading bills:', error);
             this.ui.showToast('Error loading bills', 'error');
+            this.bills = [];
         } finally {
             this.ui.hideSectionLoading('billingContent');
         }
@@ -1431,12 +1843,12 @@ class BillingManager {
             }
 
             this.ui.showSectionLoading('customersContent', 'Loading customers...');
-            this.customers = await this.db.getCustomers();
+            this.customers = await this.db.getCustomers() || [];
             this.renderCustomersTable(this.customers);
-            this.ui.showToast('Customers loaded successfully', 'success');
         } catch (error) {
             console.error('Error loading customers:', error);
             this.ui.showToast('Error loading customers', 'error');
+            this.customers = [];
         } finally {
             this.ui.hideSectionLoading('customersContent');
         }
@@ -1450,10 +1862,9 @@ class BillingManager {
             }
 
             this.ui.showSectionLoading('pendingContent', 'Loading pending bills...');
-            const bills = await this.db.getBills();
+            const bills = await this.db.getBills() || [];
             const pendingBills = bills.filter(bill => bill.status === 'pending');
             this.renderPendingTable(pendingBills);
-            this.ui.showToast('Pending bills loaded successfully', 'success');
         } catch (error) {
             console.error('Error loading pending bills:', error);
             this.ui.showToast('Error loading pending bills', 'error');
@@ -1470,58 +1881,15 @@ class BillingManager {
             }
 
             this.ui.showSectionLoading('paymentsContent', 'Loading payments...');
-            this.payments = await this.db.getPayments();
+            this.payments = await this.db.getPayments() || [];
             this.renderPaymentsTable(this.payments);
-            this.ui.showToast('Payments loaded successfully', 'success');
         } catch (error) {
             console.error('Error loading payments:', error);
             this.ui.showToast('Error loading payments', 'error');
+            this.payments = [];
         } finally {
             this.ui.hideSectionLoading('paymentsContent');
         }
-    }
-
-    renderCustomersTable(customers) {
-        const tbody = document.getElementById('customersTableBody');
-        if (!tbody) return;
-
-        if (customers.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="no-data">
-                        <i class="fas fa-user-friends"></i>
-                        <br>No customers found
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        tbody.innerHTML = customers.map(customer => `
-            <tr>
-                <td>
-                    <a href="javascript:void(0)" 
-                       onclick="app.getManagers().billing.showCustomerDetails('${customer.id}')"
-                       class="customer-link">
-                       ${customer.name}
-                    </a>
-                </td>
-                <td>${customer.phone || 'N/A'}</td>
-                <td>${customer.email || 'N/A'}</td>
-                <td>${customer.total_bills || 0}</td>
-                <td>${Utils.formatCurrency(customer.total_amount || 0)}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-icon" onclick="app.getManagers().billing.editCustomer('${customer.id}')" title="Edit Customer">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-icon btn-danger" onclick="app.getManagers().billing.deleteCustomer('${customer.id}')" title="Delete Customer">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `).join('');
     }
 
     renderPendingTable(bills) {
@@ -1531,7 +1899,7 @@ class BillingManager {
         if (bills.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" class="no-data">
+                    <td colspan="6" class="no-data">
                         <i class="fas fa-clock"></i>
                         <br>No pending bills found
                     </td>
@@ -1540,7 +1908,11 @@ class BillingManager {
             return;
         }
 
-        tbody.innerHTML = bills.map(bill => `
+        tbody.innerHTML = bills.map(bill => {
+            const customer = this.customers.find(c => c.phone === bill.customer_phone);
+            const balance = customer ? this.calculateCustomerBalance(customer) : 0;
+            
+            return `
             <tr>
                 <td>${bill.bill_number || 'N/A'}</td>
                 <td>
@@ -1552,6 +1924,7 @@ class BillingManager {
                 </td>
                 <td>${Utils.formatCurrency(bill.total_amount)}</td>
                 <td>${Utils.formatDate(bill.bill_date)}</td>
+                <td>${this.formatBalance(balance)}</td>
                 <td>
                     <div class="action-buttons">
                         <button class="btn-icon" onclick="app.getManagers().billing.markAsPaid('${bill.id}')" title="Mark as Paid">
@@ -1563,7 +1936,7 @@ class BillingManager {
                     </div>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
     }
 
     renderPaymentsTable(payments) {
@@ -1592,64 +1965,6 @@ class BillingManager {
                 <td>${payment.payment_method || 'cash'}</td>
             </tr>
         `).join('');
-    }
-
-    async markAsPaid(billId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
-            this.ui.showToast('Insufficient permissions to update bills', 'error');
-            return;
-        }
-
-        if (!confirm('Mark this bill as paid?')) return;
-
-        try {
-            // Update bill status
-            await this.db.update('bills', billId, { status: 'paid' });
-
-            // Create payment record
-            const bill = this.bills.find(b => b.id === billId);
-
-            if (bill) {
-                const paymentData = {
-                    bill_id: billId,
-                    bill_number: bill.bill_number,
-                    customer_name: bill.customer_name,
-                    amount: bill.total_amount,
-                    payment_method: 'cash',
-                    payment_date: new Date().toISOString().split('T')[0],
-                    created_at: new Date().toISOString()
-                };
-
-                await this.db.create('payments', paymentData);
-            }
-
-            this.ui.showToast('Bill marked as paid', 'success');
-            await this.loadBills();
-            await this.loadPendingBills();
-            await this.loadPayments();
-        } catch (error) {
-            console.error('Error updating bill:', error);
-            this.ui.showToast('Error updating bill: ' + error.message, 'error');
-        }
-    }
-
-    async deleteBill(billId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
-            this.ui.showToast('Insufficient permissions to delete bills', 'error');
-            return;
-        }
-
-        if (!confirm('Are you sure you want to delete this bill?')) return;
-
-        try {
-            await this.db.delete('bills', billId);
-            this.ui.showToast('Bill deleted successfully', 'success');
-            await this.loadBills();
-            await this.loadPendingBills();
-        } catch (error) {
-            console.error('Error deleting bill:', error);
-            this.ui.showToast('Error deleting bill: ' + error.message, 'error');
-        }
     }
 
     // Export methods
@@ -1708,13 +2023,17 @@ class BillingManager {
                 return;
             }
 
-            const exportData = customers.map(customer => ({
-                'Name': customer.name,
-                'Phone': customer.phone,
-                'Email': customer.email || '',
-                'Total Bills': customer.total_bills || 0,
-                'Total Amount': customer.total_amount || 0
-            }));
+            const exportData = customers.map(customer => {
+                const balance = this.calculateCustomerBalance(customer);
+                return {
+                    'Name': customer.name,
+                    'Phone': customer.phone,
+                    'Email': customer.email || '',
+                    'Address': customer.address || '',
+                    'Total Bills': customer.total_bills || 0,
+                    'Balance': balance
+                };
+            });
 
             if (window.exportManager) {
                 await window.exportManager.exportToExcel(exportData, 'customers_export', 'Customers Export');
@@ -1804,6 +2123,45 @@ class BillingManager {
         } catch (error) {
             console.error('Error exporting payments:', error);
             this.ui.showToast('Error exporting payments: ' + error.message, 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
+
+    async exportAdvancePayments() {
+        try {
+            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+                this.ui.showToast('Insufficient permissions to export advance payments', 'error');
+                return;
+            }
+
+            this.ui.showExportProgress('Preparing advance payments data...');
+            const advancePayments = await this.db.getAdvancePayments();
+
+            if (advancePayments.length === 0) {
+                this.ui.showToast('No advance payments to export', 'warning');
+                return;
+            }
+
+            const exportData = advancePayments.map(advance => ({
+                'Customer': advance.customer_name,
+                'Phone': advance.customer_phone,
+                'Amount': advance.amount,
+                'Date': Utils.formatDate(advance.payment_date),
+                'Method': advance.payment_method,
+                'Notes': advance.notes || ''
+            }));
+
+            if (window.exportManager) {
+                await window.exportManager.exportToExcel(exportData, 'advance_payments_export', 'Advance Payments Export');
+            } else {
+                Utils.exportToExcel(exportData, 'advance_payments_export');
+            }
+
+            this.ui.showToast('Advance payments exported successfully', 'success');
+        } catch (error) {
+            console.error('Error exporting advance payments:', error);
+            this.ui.showToast('Error exporting advance payments: ' + error.message, 'error');
         } finally {
             this.ui.hideExportProgress();
         }
