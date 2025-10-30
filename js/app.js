@@ -86,41 +86,40 @@ class UpdateManager {
         }
 
         const modalHtml = `
-        <div id="updateAvailableModal" class="modal">
-            <div class="modal-content" style="max-width: 500px;">
-                <div class="modal-header">
-                    <h3><i class="fas fa-download"></i> Update Available</h3>
-                    <button class="modal-close">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <p><strong>Version ${updateInfo.version || 'Unknown'}</strong> is available!</p>
-                    ${updateInfo.releaseNotes ? `
-                        <div class="release-notes">
-                            <h4>What's New:</h4>
-                            <p>${updateInfo.releaseNotes}</p>
-                        </div>
-                    ` : ''}
-                    <p>The update will download automatically.</p>
-                    <div class="download-progress" style="display: none;">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="updateProgressFill"></div>
-                        </div>
-                        <p id="updateProgressText">0%</p>
+    <div id="updateAvailableModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-download"></i> Update Available</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Version ${updateInfo.version || 'Unknown'}</strong> is available!</p>
+                ${updateInfo.releaseNotes ? `
+                    <div class="release-notes">
+                        <h4>What's New:</h4>
+                        <p>${updateInfo.releaseNotes}</p>
                     </div>
-                </div>
-                <div class="modal-actions">
-                    <button id="cancelUpdate" class="btn-secondary">Later</button>
-                    <button id="downloadUpdate" class="btn-primary">
-                        <i class="fas fa-download"></i> Download Now
-                    </button>
+                ` : ''}
+                <p>The update will download automatically.</p>
+                <div class="download-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="updateProgressFill"></div>
+                    </div>
+                    <p id="updateProgressText">0%</p>
                 </div>
             </div>
+            <div class="modal-actions">
+                <button id="cancelUpdate" class="btn-secondary">Later</button>
+                <button id="downloadUpdate" class="btn-primary">
+                    <i class="fas fa-download"></i> Download Now
+                </button>
+            </div>
         </div>
-    `;
+    </div>
+`;
 
         this.showCustomModal(modalHtml, 'updateAvailableModal');
 
-        // Use setTimeout to ensure DOM is ready
         setTimeout(() => {
             const downloadBtn = document.getElementById('downloadUpdate');
             const cancelBtn = document.getElementById('cancelUpdate');
@@ -130,7 +129,7 @@ class UpdateManager {
                 downloadBtn.addEventListener('click', () => {
                     this.hideUpdateModal();
                     this.showDownloadProgress(0);
-                    // Start download
+                    // ✅ FIXED: Use the correct IPC call
                     if (window.electronAPI?.downloadUpdate) {
                         window.electronAPI.downloadUpdate();
                     }
@@ -1175,9 +1174,9 @@ if (document.readyState === 'loading') {
     initializeApp();
 }
 // app.js - Updated initialization
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     console.log('🚀 Starting Business Dashboard Application...');
-    
+
     try {
         // Initialize the fixed UI Manager
         const uiManager = new UIManager({
@@ -1188,12 +1187,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         // Initialize UI
         await uiManager.initialize();
-        
+
         // Store globally for access from other modules
         window.uiManager = uiManager;
-        
+
         console.log('🎉 Application started successfully!');
-        
+
     } catch (error) {
         console.error('💥 Application failed to start:', error);
         // Show error to user

@@ -120,9 +120,16 @@ function createMenu() {
 
 // Auto-Updater Initialization
 function initializeAutoUpdater() {
-  autoUpdater.autoDownload = true;
+
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
+
+  // Better error handling for Windows
+  if (process.platform === 'win32') {
+    autoUpdater.forceDevUpdateConfig = false;
+    autoUpdater.disableWebInstaller = false;
+  }
 
   // Add this line to disable signature verification
   autoUpdater.disableWebInstaller = false;
@@ -176,12 +183,13 @@ function initializeAutoUpdater() {
     });
   });
 
-  // Check for updates on startup (wait a bit for app to load)
+  // Check for updates on startup
   setTimeout(() => {
     if (!isDev) {
-      autoUpdater.checkForUpdatesAndNotify();
+      console.log('🔍 Checking for updates...');
+      autoUpdater.checkForUpdates();
     }
-  }, 5000);
+  }, 10000); // Wait 10 seconds for app to fully load
 }
 
 app.whenReady().then(() => {
@@ -214,6 +222,9 @@ app.on('web-contents-created', (event, contents) => {
 //
 // ─── IPC HANDLERS ─────────────────────────────────────────────
 //
+ipcMain.handle('download-update', () => {
+  autoUpdater.downloadUpdate();
+});
 
 // ✅ Save and Load Local App Data
 ipcMain.handle('save-app-data', async (event, data) => {

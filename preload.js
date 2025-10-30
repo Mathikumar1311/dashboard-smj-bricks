@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   fileExists: (filePath) => ipcRenderer.invoke('file-exists', filePath),
 
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+
   // ===== App data persistence =====
   saveAppData: (data) => ipcRenderer.invoke('save-app-data', data),
   loadAppData: () => ipcRenderer.invoke('load-app-data'),
@@ -39,14 +41,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ===== Utility =====
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
-  
+
   /// Add this to your preload.js
-removeUpdateListeners: () => {
-  ipcRenderer.removeAllListeners('update-status');
-  ipcRenderer.removeAllListeners('update-available');
-  ipcRenderer.removeAllListeners('update-not-available');
-  ipcRenderer.removeAllListeners('download-progress');
-  ipcRenderer.removeAllListeners('update-downloaded');
-  ipcRenderer.removeAllListeners('update-error');
-}
+  removeUpdateListeners: () => {
+    ipcRenderer.removeAllListeners('update-status');
+    ipcRenderer.removeAllListeners('update-available');
+    ipcRenderer.removeAllListeners('update-not-available');
+    ipcRenderer.removeAllListeners('download-progress');
+    ipcRenderer.removeAllListeners('update-downloaded');
+    ipcRenderer.removeAllListeners('update-error');
+  }
 });
