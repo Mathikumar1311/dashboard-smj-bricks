@@ -63,17 +63,20 @@ class UpdateManager {
         if (this.isChecking) return;
 
         if (!window.electronAPI?.checkForUpdates) {
+            console.error('❌ electronAPI.checkForUpdates not available');
             this.ui.showToast('Auto-update not available in browser', 'warning');
             return;
         }
 
         this.isChecking = true;
         this.ui.showToast('Checking for updates...', 'info');
+        console.log('🔍 Checking for updates via electronAPI...');
 
         try {
-            await window.electronAPI.checkForUpdates();
+            const result = await window.electronAPI.checkForUpdates();
+            console.log('✅ Update check result:', result);
         } catch (error) {
-            console.error('Error checking updates:', error);
+            console.error('❌ Error checking updates:', error);
             this.ui.showToast('Failed to check for updates', 'error');
             this.isChecking = false;
         }
