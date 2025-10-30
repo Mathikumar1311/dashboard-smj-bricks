@@ -52,13 +52,12 @@
                         <label data-lang="username"><i class="fas fa-user"></i> Username</label>
                         <input type="text" id="username" name="username" required autocomplete="username">
                     </div>
-                    <!-- In your login section -->
                     <div class="form-group password-group">
                         <label data-lang="password"><i class="fas fa-lock"></i> Password</label>
                         <div class="password-input-container">
                             <input type="password" id="password" name="password" required
                                 autocomplete="current-password">
-                            <button type="button" class="password-toggle" onclick="PasswordToggle.handleToggle(this)">
+                            <button type="button" class="password-toggle">
                                 <i class="fas fa-eye"></i>
                             </button>
                         </div>
@@ -68,6 +67,14 @@
                     </button>
                 </form>
                 <div id="loginError" class="error-message hidden"></div>
+
+                <!-- Demo Credentials -->
+                <div class="demo-credentials">
+                    <h3>Demo Credentials:</h3>
+                    <p><strong>Admin:</strong> admin / admin123</p>
+                    <p><strong>Manager:</strong> manager / manager123</p>
+                    <p><strong>Supervisor:</strong> supervisor / supervisor123</p>
+                </div>
             </div>
         </div>
     </section>
@@ -77,13 +84,13 @@
         <!-- Topbar -->
         <header class="topbar">
             <div class="topbar-left">
-                <button id="sidebarToggle" class="sidebar-toggle" title="Toggle sidebar">
+                <button id="sidebarToggle" class="sidebar-toggle">
                     <i class="fas fa-bars"></i>
                 </button>
                 <h1 data-lang="dashboard_title"><i class="fas fa-chart-line"></i> Business Dashboard</h1>
             </div>
             <div class="topbar-right">
-                <select id="languageSelect" class="language-select" title="Select language">
+                <select id="languageSelect" class="language-select">
                     <option value="en">English</option>
                     <option value="ta">தமிழ்</option>
                 </select>
@@ -92,21 +99,18 @@
                     <i class="fas fa-moon"></i>
                 </button>
 
-                <!-- Fixed Database Status Indicator -->
-                <div id="dbStatus" class="db-status online"
-                    title="Connected to cloud database - All systems operational">
+                <!-- Subtle Online/Offline Indicator -->
+                <div id="dbStatus" class="db-status online" title="Connected to cloud database">
                     <i class="fas fa-cloud"></i>
                     <span>Online</span>
                 </div>
 
                 <div class="user-info">
                     <img id="userAvatar" class="user-avatar"
-                        src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff" alt="User Avatar"
-                        title="Your profile picture">
+                        src="https://ui-avatars.com/api/?name=User&background=ff6b35&color=fff" alt="User Avatar">
                     <span id="userName"></span>
-                    <button id="logoutBtn" class="btn-secondary" data-lang="logout" title="Logout from system">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>Logout</span>
+                    <button id="logoutBtn" class="btn-secondary" data-lang="logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
                     </button>
                 </div>
             </div>
@@ -133,8 +137,7 @@
                             <i class="fas fa-calendar-check"></i> <span>Attendance</span>
                         </a></li>
                     <!-- NEW: Salary Payments Section -->
-                    <li class="admin-manager"><a href="#salary-payments" class="nav-link"
-                            data-section="salary-payments">
+                    <li class="admin-manager"><a href="#salary-payments" class="nav-link" data-section="salary-payments">
                             <i class="fas fa-money-check"></i> <span>Salary Payments</span>
                         </a></li>
                     <li class="admin-supervisor"><a href="#billing" class="nav-link" data-section="billing">
@@ -302,13 +305,15 @@
                     </div>
                 </div>
 
-                <!-- UPDATED: Salary Content with Attendance & Payslip -->
+                <!-- Salary Content -->
                 <div id="salaryContent" class="content-section">
                     <div class="content-header">
-                        <h2 data-lang="salary"><i class="fas fa-money-bill-wave"></i> Complete Salary Management</h2>
+                        <h2 data-lang="salary"><i class="fas fa-money-bill-wave"></i> Salary Management</h2>
                         <div class="header-actions">
                             <div class="filter-buttons">
                                 <button class="btn-filter active" data-filter="all">All</button>
+                                <button class="btn-filter" data-filter="pending">Pending</button>
+                                <button class="btn-filter" data-filter="paid">Paid</button>
                                 <button class="btn-filter" data-filter="today">Today</button>
                                 <button class="btn-filter" data-filter="week">This Week</button>
                                 <button class="btn-filter" data-filter="month">This Month</button>
@@ -316,110 +321,107 @@
                             <button id="exportSalaryBtn" class="btn-secondary">
                                 <i class="fas fa-download"></i> Export
                             </button>
-                            <button id="processSalaryBtn" class="btn-secondary">
-                                <i class="fas fa-money-check"></i> Process Salary
-                            </button>
-                            <button id="markAttendanceBtn" class="btn-primary">
-                                <i class="fas fa-calendar-check"></i> Mark Attendance
-                            </button>
                         </div>
                     </div>
 
-                    <!-- Summary Cards -->
-                    <div class="summary-cards">
+                    <!-- Salary Summary Cards -->
+                    <div class="summary-cards" style="margin-bottom: 2rem;">
                         <div class="summary-card">
-                            <div class="summary-icon present">
-                                <i class="fas fa-user-check"></i>
-                            </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Present Today</div>
-                                <div class="summary-value" id="presentTodayCount">0</div>
-                            </div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="summary-icon absent">
-                                <i class="fas fa-user-times"></i>
-                            </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Absent Today</div>
-                                <div class="summary-value" id="absentTodayCount">0</div>
-                            </div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="summary-icon total">
+                            <div class="summary-icon total-salary">
                                 <i class="fas fa-wallet"></i>
                             </div>
                             <div class="summary-content">
-                                <div class="summary-label">Total Paid</div>
+                                <div class="summary-label">Total Paid This Month</div>
                                 <div class="summary-value" id="totalPaidAmount">₹0</div>
                             </div>
                         </div>
                         <div class="summary-card">
                             <div class="summary-icon pending">
-                                <i class="fas fa-hand-holding-usd"></i>
+                                <i class="fas fa-clock"></i>
                             </div>
                             <div class="summary-content">
-                                <div class="summary-label">Pending Advances</div>
-                                <div class="summary-value" id="pendingAdvances">₹0</div>
+                                <div class="summary-label">Pending Payments</div>
+                                <div class="summary-value" id="pendingCount">0</div>
+                            </div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-icon incentive">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="summary-content">
+                                <div class="summary-label">Total Incentives</div>
+                                <div class="summary-value" id="totalIncentives">₹0</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Quick Salary Form -->
+                    <!-- Salary Form Section -->
                     <div class="salary-form-container">
                         <form id="salaryForm" class="form-card">
-                            <h3><i class="fas fa-plus-circle"></i> Quick Salary/Advance Entry</h3>
-
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label>Employee *</label>
+                                    <label>Employee</label>
                                     <select id="salaryEmployee" required>
                                         <option value="">Select Employee</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label>Date *</label>
+                                    <label>Date</label>
                                     <input type="date" id="salaryDate" required>
                                 </div>
                             </div>
-
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label>Salary Amount (₹)</label>
-                                    <input type="number" id="salaryAmount" min="0" step="0.01"
-                                        placeholder="Salary amount">
+                                    <label>Base Salary (₹) *</label>
+                                    <input type="number" id="salaryAmount" required min="0" step="0.01">
+                                </div>
+                                <div class="form-group">
+                                    <label>Incentive Amount (₹)</label>
+                                    <input type="number" id="incentiveAmount" min="0" step="0.01" value="0">
                                 </div>
                                 <div class="form-group">
                                     <label>Advance Amount (₹)</label>
-                                    <input type="number" id="advanceAmount" min="0" step="0.01"
-                                        placeholder="Advance amount">
+                                    <input type="number" id="advanceAmount" min="0" step="0.01" value="0"
+                                        placeholder="Optional">
                                 </div>
                             </div>
-
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Total Amount (₹)</label>
+                                    <input type="text" id="totalAmount" readonly class="readonly-field">
+                                </div>
+                                <div class="form-group">
+                                    <label>Status</label>
+                                    <select id="salaryStatus" required>
+                                        <option value="paid">Paid</option>
+                                        <option value="pending">Pending</option>
+                                    </select>
+                                </div>
+                            </div>
                             <button type="submit" class="btn-primary">
-                                <i class="fas fa-save"></i> Save Record
+                                <i class="fas fa-plus"></i> Add Salary Payment
                             </button>
                         </form>
                     </div>
 
-                    <!-- Records Table -->
                     <div class="table-container">
                         <table id="salaryTable" class="data-table">
                             <thead>
                                 <tr>
                                     <th>Time</th>
-                                    <th>Employee ID</th>
-                                    <th>Employee Name</th>
-                                    <th>Type</th>
-                                    <th>Amount</th>
-                                    <th>Week</th>
+                                    <th data-lang="employee_id">Employee ID</th>
+                                    <th data-lang="employee">Employee</th>
+                                    <th>Salary</th>
+                                    <th>Incentive</th>
+                                    <th>Advance</th>
+                                    <th>Total</th>
+                                    <th>Allocation Used</th>
                                     <th>Status</th>
-                                    <th>Actions</th>
+                                    <th>Week</th>
+                                    <th data-lang="actions">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="salaryTableBody">
-                                <!-- Records will be loaded here -->
-                            </tbody>
+                            <tbody id="salaryTableBody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -817,653 +819,3 @@
             </main>
         </div>
     </section>
-
-    <!-- User Modal - UPDATED PASSWORD SECTION -->
-    <div id="userModal" class="modal hidden">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="userModalTitle">Add User</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="userForm" class="modal-form">
-                <input type="hidden" id="editUserId">
-
-                <div class="form-group">
-                    <label>Name *</label>
-                    <input type="text" id="userNameInput" required placeholder="Enter full name">
-                </div>
-
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="userEmail" placeholder="Enter email address">
-                </div>
-
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="tel" id="userPhone" placeholder="Enter phone number">
-                </div>
-
-                <!-- ✅ ADD THIS PASSWORD SECTION -->
-                <div class="form-group">
-                    <label>Password *</label>
-                    <div class="password-input-container">
-                        <input type="password" id="userPassword" required placeholder="Enter password">
-                        <button type="button" class="password-toggle" onclick="PasswordToggle.handleToggle(this)">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Confirm Password *</label>
-                    <div class="password-input-container">
-                        <input type="password" id="userConfirmPassword" required placeholder="Confirm password">
-                        <button type="button" class="password-toggle">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-                <!-- ✅ END PASSWORD SECTION -->
-
-                <div class="form-group">
-                    <label>Role *</label>
-                    <select id="userRole" required>
-                        <option value="">Select Role</option>
-                        <option value="admin">Administrator</option>
-                        <option value="manager">Manager</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="user">User</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Status *</label>
-                    <select id="userStatus" required>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                    </select>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Save User</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <!-- Employee Modal -->
-    <div id="employeeModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="employeeModalTitle">Add Employee</h3>
-                <button type="button" class="modal-close">&times;</button>
-            </div>
-            <form id="employeeForm" class="modal-form">
-                <input type="hidden" id="editEmployeeId">
-
-                <div class="form-group">
-                    <label>Employee Type *</label>
-                    <div class="form-row" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
-                        <label class="radio-label">
-                            <input type="radio" name="employeeType" value="employee" checked>
-                            <i class="fas fa-user-tie"></i>
-                            <span>Employee</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="employeeType" value="driver">
-                            <i class="fas fa-truck"></i>
-                            <span>Driver</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Name *</label>
-                    <input type="text" id="employeeName" required placeholder="Enter full name">
-                </div>
-
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="tel" id="employeePhone" placeholder="Enter phone number (optional)">
-                    <small style="color: #666; font-size: 0.8rem;">Same phone number can be used for multiple
-                        employees</small>
-                </div>
-
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="employeeEmail" placeholder="Enter email address (optional)">
-                </div>
-
-                <div class="form-group">
-                    <label>Role *</label>
-                    <input type="text" id="employeeRole" required
-                        placeholder="e.g., Manager, Sales Executive, Delivery Driver">
-                </div>
-
-                <div class="form-group">
-                    <label>Join Date *</label>
-                    <input type="date" id="employeeJoinDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Salary Type *</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="salaryType" value="daily" checked>
-                            <i class="fas fa-calendar-day"></i>
-                            <span>Daily</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="salaryType" value="monthly">
-                            <i class="fas fa-calendar-alt"></i>
-                            <span>Monthly</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div id="vehicleNumberField" class="form-group" style="display: none;">
-                    <label>Vehicle Number *</label>
-                    <input type="text" id="employeeVehicleNumber" placeholder="e.g., TN01AB1234">
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Employee</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- NEW: Family Group Modal -->
-    <div id="familyGroupModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-users"></i> Create Family Group</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="familyGroupForm" class="modal-form">
-                <div class="form-group">
-                    <label>Family Name *</label>
-                    <input type="text" id="familyName" required placeholder="Enter family name">
-                </div>
-                <div class="form-group">
-                    <label>Primary Member *</label>
-                    <select id="primaryMemberId" required>
-                        <option value="">Select Primary Member</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Bank Account Number</label>
-                    <input type="text" id="bankAccountNumber" placeholder="Enter account number">
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Bank Name</label>
-                        <input type="text" id="bankName" placeholder="Enter bank name">
-                    </div>
-                    <div class="form-group">
-                        <label>IFSC Code</label>
-                        <input type="text" id="ifscCode" placeholder="Enter IFSC code">
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Create Family Group</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- NEW: Attendance Modal -->
-    <div id="attendanceModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-calendar-check"></i> Mark Attendance</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="attendanceForm" class="modal-form">
-                <div class="form-group">
-                    <label>Employee *</label>
-                    <select id="attendanceEmployeeId" required>
-                        <option value="">Select Employee</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Date *</label>
-                    <input type="date" id="attendanceDate" required>
-                </div>
-                <div class="form-group">
-                    <label>Status *</label>
-                    <select id="attendanceStatus" required>
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                        <option value="half_day">Half Day</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Check In Time</label>
-                        <input type="time" id="checkInTime">
-                    </div>
-                    <div class="form-group">
-                        <label>Check Out Time</label>
-                        <input type="time" id="checkOutTime">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="attendanceNotes" placeholder="Add any notes"></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Mark Attendance</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- NEW: Salary Payment Modal -->
-    <div id="salaryPaymentModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-money-check"></i> Process Salary Payment</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="salaryPaymentForm" class="modal-form">
-                <div class="form-group">
-                    <label>Employee *</label>
-                    <select id="salaryEmployeeId" required>
-                        <option value="">Select Employee</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Pay Period Start *</label>
-                        <input type="date" id="payPeriodStart" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Pay Period End *</label>
-                        <input type="date" id="payPeriodEnd" required>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Payment Date *</label>
-                    <input type="date" id="paymentDate" required>
-                </div>
-                <div class="form-group">
-                    <label>Payment Method *</label>
-                    <select id="paymentMethod" required>
-                        <option value="cash">Cash</option>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="cheque">Cheque</option>
-                    </select>
-                </div>
-                <div id="salaryPreview" class="salary-preview" style="display: none;">
-                    <h4>Salary Preview</h4>
-                    <div class="preview-items">
-                        <div class="preview-item">
-                            <span>Basic Salary:</span>
-                            <span id="previewBasicSalary">₹0</span>
-                        </div>
-                        <div class="preview-item">
-                            <span>Overtime:</span>
-                            <span id="previewOvertime">₹0</span>
-                        </div>
-                        <div class="preview-item">
-                            <span>Advances Deducted:</span>
-                            <span id="previewAdvances">-₹0</span>
-                        </div>
-                        <div class="preview-item total">
-                            <span>Net Salary:</span>
-                            <span id="previewNetSalary">₹0</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="button" id="calculateSalaryBtn" class="btn-secondary">Calculate</button>
-                    <button type="submit" class="btn-primary">Process Payment</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Advance Payment Modal -->
-    <div id="advanceModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="advanceModalTitle">Add Advance Payment</h3>
-                <button type="button" class="modal-close">&times;</button>
-            </div>
-            <form id="advanceForm" class="modal-form">
-                <input type="hidden" id="advanceEmployeeId">
-
-                <div class="form-group">
-                    <label>Employee</label>
-                    <input type="text" id="advanceEmployeeName" readonly class="readonly-field">
-                </div>
-
-                <div class="form-group">
-                    <label>Remaining Allocation</label>
-                    <input type="text" id="advanceRemaining" readonly class="readonly-field">
-                </div>
-
-                <div class="form-group">
-                    <label>Advance Amount (₹) *</label>
-                    <input type="number" id="advanceAmount" required min="1" step="0.01"
-                        placeholder="Enter advance amount">
-                    <small>Maximum: <span id="advanceMaxAmount">₹0</span></small>
-                </div>
-
-                <div class="form-group">
-                    <label>Payment Date *</label>
-                    <input type="date" id="advanceDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="advanceNotes" placeholder="Add notes about this advance payment"></textarea>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Add Advance Payment</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Employee Details Modal -->
-    <div id="employeeDetailsModal" class="modal hidden">
-        <!-- This modal will be populated dynamically by JavaScript -->
-    </div>
-
-    <!-- Bill Modal -->
-    <div id="billModal" class="modal hidden">
-        <div class="modal-content large">
-            <div class="modal-header">
-                <h3 id="billModalTitle">Add Bill</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="billForm" class="modal-form">
-                <input type="hidden" id="editBillId">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Bill No *</label>
-                        <input type="text" id="billNumber" required readonly>
-                    </div>
-                    <div class="form-group">
-                        <label>Date *</label>
-                        <input type="date" id="billDate" required>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h4>Customer Details</h4>
-
-                    <div class="form-group">
-                        <label>Search Existing Customer</label>
-                        <div class="search-box">
-                            <i class="fas fa-search"></i>
-                            <input type="text" id="customerSearch" placeholder="Search by name or phone...">
-                        </div>
-                        <div id="customerResults" class="customer-results"></div>
-                        <small style="color: #666;">Search for existing customers or fill details below for new
-                            customer</small>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Customer Name *</label>
-                            <input type="text" id="customerName" required placeholder="Enter customer name">
-                        </div>
-                        <div class="form-group">
-                            <label>Phone *</label>
-                            <input type="tel" id="customerPhone" required placeholder="Enter phone number">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="customerEmail" placeholder="Enter email address">
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h4>Bill Items</h4>
-                    <div id="billItems">
-                        <!-- Bill items will be added here dynamically -->
-                    </div>
-                    <button type="button" id="addItemBtn" class="btn-secondary">
-                        <i class="fas fa-plus"></i> Add Item
-                    </button>
-                </div>
-
-                <div class="form-section">
-                    <h4>Bill Summary</h4>
-                    <div class="bill-summary">
-                        <div class="summary-row">
-                            <span>Sub Total:</span>
-                            <span id="subTotal">₹0.00</span>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>GST % *</label>
-                                <input type="number" id="billGst" value="18" min="0" max="100" required>
-                            </div>
-                            <div class="form-group">
-                                <label>GST Amount</label>
-                                <input type="text" id="gstAmountInput" readonly>
-                            </div>
-                        </div>
-                        <div class="summary-row total">
-                            <span>Total Amount:</span>
-                            <span id="totalAmount">₹0.00</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Bill</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Customer Modal -->
-    <div id="customerModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="customerModalTitle">Add Customer</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <form id="customerForm" class="modal-form">
-                <input type="hidden" id="editCustomerId">
-                <div class="form-group">
-                    <label>Name *</label>
-                    <input type="text" id="customerNameInput" required placeholder="Enter customer name">
-                </div>
-                <div class="form-group">
-                    <label>Phone *</label>
-                    <input type="tel" id="customerPhoneInput" required placeholder="Enter phone number">
-                </div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="customerEmailInput" placeholder="Enter email address">
-                </div>
-                <div class="form-group">
-                    <label>Address</label>
-                    <textarea id="customerAddress" rows="3" placeholder="Enter customer address"></textarea>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                    <button type="submit" class="btn-primary">Save Customer</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Export Modal -->
-    <div id="exportModal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-download"></i> Export Options</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="export-options">
-                <div class="export-option" data-format="excel">
-                    <div class="export-icon excel">
-                        <i class="fas fa-file-excel"></i>
-                    </div>
-                    <div class="export-info">
-                        <h4>Export to Excel</h4>
-                        <p>Download as .xlsx file for data analysis</p>
-                    </div>
-                    <div class="export-arrow">
-                        <i class="fas fa-chevron-right"></i>
-                    </div>
-                </div>
-
-                <div class="export-option" data-format="pdf">
-                    <div class="export-icon pdf">
-                        <i class="fas fa-file-pdf"></i>
-                    </div>
-                    <div class="export-info">
-                        <h4>Export to PDF</h4>
-                        <p>Download as .pdf file for reporting</p>
-                    </div>
-                    <div class="export-arrow">
-                        <i class="fas fa-chevron-right"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button class="btn-secondary modal-cancel">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Notification -->
-    <div id="toast" class="toast hidden"></div>
-
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="hidden">
-        <div class="loading-container">
-            <div class="loading-spinner">
-                <div class="loading-ring"></div>
-                <i class="fas fa-chart-line loader-icon"></i>
-            </div>
-            <p class="loading-text">Loading...</p>
-        </div>
-    </div>
-
-    <!-- Export Progress Overlay -->
-    <div id="exportProgress" class="modal hidden">
-        <div class="modal-content small">
-            <div class="modal-header">
-                <h3><i class="fas fa-download"></i> Exporting Data</h3>
-            </div>
-            <div class="export-progress-content">
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: 0%"></div>
-                </div>
-                <p class="progress-text">Preparing data...</p>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Elegant loading animation with better timing
-        let progress = 0;
-        const progressFill = document.querySelector('.progress-fill');
-        const progressText = document.querySelector('.progress-text');
-        const loadingStatus = document.querySelector('.loading-status');
-        let loadingInterval;
-
-        const loadingSteps = [
-            { percent: 15, text: "Loading core modules..." },
-            { percent: 35, text: "Initializing database..." },
-            { percent: 55, text: "Setting up interface..." },
-            { percent: 75, text: "Loading user data..." },
-            { percent: 90, text: "Finalizing setup..." },
-            { percent: 100, text: "Ready!" }
-        ];
-
-        function updateLoadingStatus(currentProgress) {
-            const step = loadingSteps.find(s => currentProgress <= s.percent) || loadingSteps[loadingSteps.length - 1];
-            if (loadingStatus) {
-                loadingStatus.textContent = step.text;
-            }
-        }
-
-        function safeUpdateProgress() {
-            if (progressFill && progressFill.style) {
-                progressFill.style.width = `${progress}%`;
-            }
-            if (progressText && progressText.textContent !== undefined) {
-                progressText.textContent = `${Math.round(progress)}%`;
-            }
-            updateLoadingStatus(progress);
-        }
-
-        function startLoadingAnimation() {
-            if (!progressFill || !progressText || !loadingStatus) {
-                console.warn('Progress elements not found');
-                return;
-            }
-
-            loadingInterval = setInterval(() => {
-                progress += Math.random() * 8 + 4; // Slower, more elegant progress
-                if (progress > 100) {
-                    progress = 100;
-                    clearInterval(loadingInterval);
-
-                    // Add completion class
-                    document.querySelector('.loading-progress').classList.add('loading-complete');
-
-                    // Smooth fade out
-                    setTimeout(() => {
-                        const splashScreen = document.querySelector('.splash-screen');
-                        if (splashScreen) {
-                            splashScreen.style.opacity = '0';
-                            splashScreen.style.transition = 'opacity 0.8s ease';
-                            setTimeout(() => {
-                                splashScreen.style.display = 'none';
-                            }, 800);
-                        }
-                    }, 1000);
-                }
-                safeUpdateProgress();
-            }, 250);
-        }
-
-        // Start loading animation safely
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', startLoadingAnimation);
-        } else {
-            startLoadingAnimation();
-        }
-    </script>
-
-    <!-- Scripts -->
-    <script src="js/utils.js"></script>
-    <script src="js/theme.js"></script>
-    <script src="js/lang.js"></script>
-    <script src="js/db.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/user-manager.js"></script>
-    <script src="js/employee-manager.js"></script>
-    <script src="js/attendance-manager.js"></script>
-    <script src="js/salary-manager.js"></script>
-    <script src="js/billing-manager.js"></script>
-    <script src="js/customer-manager.js"></script>
-    <script src="js/reports-manager.js"></script>
-    <script src="js/export-manager.js"></script>
-    <script src="js/settings-manager.js"></script>
-    <script src="js/app.js"></script>
-</body>
-
-</html>

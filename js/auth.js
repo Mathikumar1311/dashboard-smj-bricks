@@ -173,10 +173,10 @@ class AuthManager {
         }
 
         // 2) Fallback demo users
-        const demoUser = Object.values(this._demoUsers).find(demo => 
+        const demoUser = Object.values(this._demoUsers).find(demo =>
             demo.username === username && demo.password === password
         );
-        
+
         if (demoUser) {
             const { password: _, ...safeUser } = demoUser;
             return safeUser;
@@ -404,10 +404,10 @@ class AuthManager {
 
     setupBasicRoleAccess(role) {
         const rolePermissions = {
-            admin: ['dashboard', 'users', 'employees', 'salary', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
-            manager: ['dashboard', 'employees', 'salary', 'reports', 'settings'],
-            supervisor: ['dashboard', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
-            user: ['dashboard', 'settings']
+            admin: ['dashboard', 'users', 'employees', 'salary', 'attendance', 'salary-payments', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+            manager: ['dashboard', 'employees', 'salary', 'attendance', 'salary-payments', 'billing', 'customers', 'pending', 'payments', 'reports'],
+            supervisor: ['dashboard', 'billing', 'customers', 'pending', 'payments', 'reports'],
+            user: ['dashboard', 'reports']
         };
 
         const allowed = rolePermissions[role] || ['dashboard', 'settings'];

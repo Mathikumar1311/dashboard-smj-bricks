@@ -1,496 +1,1323 @@
+/**
+ * 🛡️ BULLETPROOF UI MANAGER - PERSISTENT LOGIN VERSION
+ * ✅ Maintains login state after page reload
+ * ✅ Secure session management
+ * ✅ Auto-login from saved session
+ */
+
 class UIManager {
-    constructor(dependencies) {
-        this.themeManager = dependencies.themeManager;
-        this.langManager = dependencies.langManager;
-        this.auth = dependencies.auth;
-        this.sidebarCollapsed = false;
-        this.currentSection = 'dashboard';
+    constructor(dependencies = {}) {
+        console.log('🛡️ Initializing UI Manager...');
+
+        // 🛡️ SAFE DEPENDENCY INITIALIZATION
+        this.themeManager = this.safeGet(dependencies, 'themeManager', this.createThemeManagerFallback());
+        this.langManager = this.safeGet(dependencies, 'langManager', this.createLangManagerFallback());
+        this.auth = this.safeGet(dependencies, 'auth', this.createAuthFallback());
+
+        // 🛡️ SAFE STATE INITIALIZATION
+        this.sidebarCollapsed = this.safeGet(localStorage, 'sidebarCollapsed', 'false') === 'true';
+        this.currentSection = this.safeGet(window.location, 'hash', '#dashboard').replace('#', '');
+        this.initialized = false;
+        this.eventListeners = new Map();
+
+        // ✅ FIX: Check for existing session on initialization
+        this.isAuthenticated = this.checkExistingSession();
+
+        console.log('✅ UI Manager initialized - Auth state:', this.isAuthenticated);
     }
 
+    // 🛡️ CHECK FOR EXISTING SESSION
+    checkExistingSession() {
+        return this.safeExecute(() => {
+            const session = localStorage.getItem('userSession');
+            if (session) {
+                try {
+                    const userData = JSON.parse(session);
+                    const sessionExpiry = localStorage.getItem('sessionExpiry');
+
+                    // Check if session is still valid
+                    if (sessionExpiry && new Date().getTime() < parseInt(sessionExpiry)) {
+                        console.log('🔑 Restoring existing session:', userData);
+
+                        // Restore user data in auth manager
+                        this.auth.getCurrentUser = () => userData;
+                        return true;
+                    } else {
+                        // Session expired, clear it
+                        console.log('🚫 Session expired, clearing...');
+                        this.clearSession();
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('❌ Invalid session data:', error);
+                    this.clearSession();
+                    return false;
+                }
+            }
+            return false;
+        }, 'Check existing session', false);
+    }
+
+    // 🛡️ SAVE SESSION DATA
+    saveSession(userData) {
+        return this.safeExecute(() => {
+            if (!userData) return false;
+
+            // Save user data to localStorage
+            localStorage.setItem('userSession', JSON.stringify(userData));
+
+            // Set session expiry (24 hours from now)
+            const expiryTime = new Date().getTime() + (24 * 60 * 60 * 1000);
+            localStorage.setItem('sessionExpiry', expiryTime.toString());
+
+            // Save login timestamp
+            localStorage.setItem('loginTime', new Date().toISOString());
+
+            console.log('💾 Session saved for user:', userData.name);
+            return true;
+        }, 'Save session', false);
+    }
+
+    // 🛡️ CLEAR SESSION DATA
+    clearSession() {
+        return this.safeExecute(() => {
+            localStorage.removeItem('userSession');
+            localStorage.removeItem('sessionExpiry');
+            localStorage.removeItem('loginTime');
+            console.log('🧹 Session cleared');
+            return true;
+        }, 'Clear session', false);
+    }
+
+    // 🛡️ CORE SAFETY METHODS
+    safeGet(obj, prop, defaultValue = null) {
+        try {
+            return obj && obj[prop] !== undefined ? obj[prop] : defaultValue;
+        } catch (error) {
+            console.warn(`⚠️ Safe get failed for ${prop}:`, error);
+            return defaultValue;
+        }
+    }
+
+    safeExecute(operation, context = 'operation', fallback = null) {
+        try {
+            return operation();
+        } catch (error) {
+            console.error(`❌ ${context} failed:`, error);
+            this.showToast(`${context} failed`, 'error');
+            return fallback;
+        }
+    }
+
+    // 🛡️ FIXED AUTH FALLBACK - WITH SESSION SUPPORT
+    createAuthFallback() {
+        console.log('🔐 Creating auth manager fallback');
+        const self = this;
+
+        return {
+            getCurrentUser: () => self.safeExecute(() => {
+                // Try to get user from session first
+                const session = localStorage.getItem('userSession');
+                if (session) {
+                    try {
+                        return JSON.parse(session);
+                    } catch (error) {
+                        console.error('❌ Failed to parse user session:', error);
+                        return null;
+                    }
+                }
+                return null;
+            }, 'Get user', null),
+
+            hasPermission: (permission) => self.safeExecute(() => {
+                const user = self.auth.getCurrentUser();
+
+                if (!user) {
+                    console.log('❌ No user - permission denied');
+                    return false;
+                }
+
+                // Complete permission system
+                const rolePermissions = {
+                    'admin': ['dashboard', 'users', 'employees', 'salary', 'attendance', 'salary-payments', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+                    'manager': ['dashboard', 'employees', 'salary', 'attendance', 'salary-payments', 'reports', 'settings'],
+                    'supervisor': ['dashboard', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+                    'user': ['dashboard', 'settings']
+                };
+
+                const userRole = user?.role || 'user';
+                const allowedSections = rolePermissions[userRole] || ['dashboard', 'settings'];
+                const hasPerm = allowedSections.includes(permission);
+
+                console.log(`🔐 Permission result: ${userRole} -> ${permission} = ${hasPerm}`);
+                return hasPerm;
+
+            }, 'Check permission', false),
+
+            isAuthenticated: () => self.safeExecute(() => self.isAuthenticated, 'Check auth', false)
+        };
+    }
+
+    // 🛡️ FIXED INITIALIZATION - CHECK SESSION FIRST
     async initialize() {
+        if (this.initialized) {
+            console.log('🔄 UI Manager already initialized');
+            return true;
+        }
+
         console.log('🎨 Initializing UI components...');
 
-        try {
-            // Wait for DOM to be ready
+        return this.safeExecute(async () => {
+            // Wait for DOM to be completely ready
             if (document.readyState === 'loading') {
-                await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
+                await new Promise(resolve => {
+                    document.addEventListener('DOMContentLoaded', resolve, { once: true });
+                });
+            }
+
+            // Additional safety delay
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // ✅ FIX: Check authentication state and show appropriate screen
+            if (this.isAuthenticated) {
+                console.log('🔑 User is authenticated, showing dashboard...');
+                this.showDashboard();
+            } else {
+                console.log('🔐 No active session, showing login...');
+                this.showLogin();
             }
 
             this.setupEventListeners();
             this.setupModals();
             this.initializeFromSavedState();
 
-            console.log('✅ UI components initialized');
+            this.initialized = true;
+            console.log('✅ UI components initialized successfully');
+
+            // Show appropriate ready message
+            setTimeout(() => {
+                if (this.isAuthenticated) {
+                    const user = this.auth.getCurrentUser();
+                    this.showToast(`Welcome back, ${user?.name || 'User'}!`, 'success', 3000);
+                } else {
+                    this.showToast('Application ready! Please login.', 'info', 3000);
+                }
+            }, 1000);
+
             return true;
+        }, 'UI initialization', false);
+    }
+
+    // 🛡️ FIXED SHOW LOGIN
+    showLogin() {
+        return this.safeExecute(() => {
+            console.log('🔐 Showing login screen...');
+
+            // Hide dashboard completely
+            const dashboardSection = document.getElementById('dashboardSection');
+            if (dashboardSection) {
+                dashboardSection.classList.add('hidden');
+                dashboardSection.style.display = 'none';
+            }
+
+            // Show login
+            const loginSection = document.getElementById('loginSection');
+            if (loginSection) {
+                loginSection.classList.remove('hidden');
+                loginSection.style.display = 'flex';
+
+                // Clear login form
+                const loginForm = document.getElementById('loginForm');
+                if (loginForm) {
+                    loginForm.reset();
+                }
+
+                // Clear any errors
+                const errorElement = document.getElementById('loginError');
+                if (errorElement) {
+                    errorElement.classList.add('hidden');
+                }
+            }
+
+            console.log('✅ Login screen shown successfully');
+            return true;
+        }, 'Show login', false);
+    }
+
+    // 🛡️ FIXED SHOW DASHBOARD - AFTER SUCCESSFUL LOGIN
+    showDashboard() {
+        return this.safeExecute(() => {
+            console.log('🚀 Showing dashboard...');
+
+            // Hide login section
+            const loginSection = document.getElementById('loginSection');
+            if (loginSection) {
+                loginSection.classList.add('hidden');
+                loginSection.style.display = 'none';
+            }
+
+            // Show dashboard section
+            const dashboardSection = document.getElementById('dashboardSection');
+            if (dashboardSection) {
+                dashboardSection.classList.remove('hidden');
+                dashboardSection.style.display = 'block';
+            }
+
+            // Show dashboard content
+            this.showSection('dashboard');
+
+            // Update user info and setup permissions
+            this.updateUserInfo();
+            this.setupRoleBasedAccess();
+
+            console.log('✅ Dashboard shown successfully');
+            return true;
+        }, 'Show dashboard', false);
+    }
+
+    // 🛡️ FIXED LOGIN HANDLER - SAVE SESSION
+    handleSuccessfulLogin(userData) {
+        return this.safeExecute(() => {
+            console.log('🎉 Handling successful login...', userData);
+
+            // ✅ FIX: Set authentication state
+            this.isAuthenticated = true;
+
+            // ✅ FIX: Save session to localStorage
+            this.saveSession(userData);
+
+            // ✅ FIX: Update auth manager with user data
+            if (userData) {
+                this.auth.getCurrentUser = () => userData;
+            }
+
+            // ✅ FIX: Show dashboard
+            this.showDashboard();
+
+            // ✅ FIX: Show welcome message
+            this.showToast(`Welcome back, ${userData?.name || 'User'}!`, 'success');
+
+            console.log('✅ Login handled successfully');
+            return true;
+        }, 'Handle successful login', false);
+    }
+
+    // 🛡️ FIXED LOGOUT HANDLER - CLEAR SESSION
+    handleLogout() {
+        return this.safeExecute(() => {
+            console.log('🚪 Handling logout...');
+
+            // ✅ FIX: Get user name for message before clearing
+            const userName = this.auth.getCurrentUser()?.name;
+
+            // ✅ FIX: Reset authentication state
+            this.isAuthenticated = false;
+
+            // ✅ FIX: Clear session data
+            this.clearSession();
+
+            // ✅ FIX: Show login
+            this.showLogin();
+
+            // ✅ FIX: Hide all modals
+            this.hideAllModals();
+
+            // ✅ FIX: Reset to dashboard section for next login
+            this.currentSection = 'dashboard';
+
+            // ✅ FIX: Clear user data
+            this.auth.getCurrentUser = () => null;
+
+            // ✅ FIX: Show logout message
+            this.showToast(`Goodbye, ${userName || 'User'}! You have been logged out.`, 'info');
+
+            console.log('✅ Logout handled successfully');
+            return true;
+        }, 'Handle logout', false);
+    }
+
+    // 🛡️ FIXED LOGIN FORM SUBMIT HANDLER
+    handleLoginFormSubmit(e) {
+        return this.safeExecute(async () => {
+            console.log('🔐 Handling login form submit...');
+
+            const form = e.target;
+            const formData = new FormData(form);
+            const username = formData.get('username');
+            const password = formData.get('password');
+
+            // Clear previous errors
+            const errorElement = document.getElementById('loginError');
+            if (errorElement) {
+                errorElement.classList.add('hidden');
+            }
+
+            // ✅ FIX: Show loading state
+            const submitButton = form.querySelector('button[type="submit"]');
+            const resetLoading = this.showButtonLoading(submitButton, 'Signing in...');
+
+            try {
+                // ✅ FIX: Simulate login process
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // ✅ FIX: Demo credentials check
+                const demoCredentials = {
+                    'admin': 'admin123',
+                    'manager': 'manager123',
+                    'supervisor': 'supervisor123'
+                };
+
+                if (demoCredentials[username] && demoCredentials[username] === password) {
+                    // ✅ FIX: Successful login - create user data
+                    const userData = {
+                        name: username.charAt(0).toUpperCase() + username.slice(1) + ' User',
+                        role: username,
+                        email: `${username}@business.com`,
+                        id: `${username}-001`,
+                        loginTime: new Date().toISOString()
+                    };
+
+                    this.handleSuccessfulLogin(userData);
+                } else {
+                    // ✅ FIX: Failed login
+                    this.showToast('Invalid username or password', 'error');
+
+                    // Show error in form
+                    if (errorElement) {
+                        errorElement.textContent = 'Invalid username or password';
+                        errorElement.classList.remove('hidden');
+                    }
+                }
+
+            } catch (error) {
+                console.error('Login error:', error);
+                this.showToast('Login failed. Please try again.', 'error');
+            } finally {
+                // ✅ FIX: Reset loading state
+                resetLoading();
+            }
+
+        }, 'Login form submit', false);
+    }
+
+    // 🛡️ FIXED SECTION MANAGEMENT
+    showSection(sectionName) {
+        return this.safeExecute(() => {
+            console.log(`📂 Attempting to show section: ${sectionName}`);
+
+            // ✅ FIX: Check authentication first
+            if (!this.isAuthenticated) {
+                this.showToast('Please login first', 'error');
+                this.showLogin();
+                return false;
+            }
+
+            // ✅ FIX: Check permissions for all sections except dashboard
+            if (sectionName !== 'dashboard' && !this.auth.hasPermission(sectionName)) {
+                this.showToast('You do not have permission to access this section', 'error');
+                return false;
+            }
+
+            const targetSection = document.getElementById(sectionName + 'Content');
+            if (!targetSection) {
+                console.warn(`❌ Section content not found: ${sectionName}Content`);
+                this.showToast(`Section "${sectionName}" is not available`, 'error');
+                return false;
+            }
+
+            // ✅ FIX: Improved section hiding
+            document.querySelectorAll('.content-section').forEach(section => {
+                this.safeExecute(() => {
+                    section.classList.remove('active');
+                    section.style.display = 'none';
+                }, `Hide section: ${section.id}`);
+            });
+
+            // ✅ FIX: Improved nav link activation
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            // ✅ FIX: Show the selected section
+            targetSection.classList.add('active');
+            targetSection.style.display = 'block';
+
+            // ✅ FIX: Better nav link targeting
+            const targetLink = document.querySelector(`[data-section="${sectionName}"]`);
+            if (targetLink) {
+                targetLink.classList.add('active');
+            }
+
+            this.currentSection = sectionName;
+
+            // ✅ FIX: Dispatch section change event
+            window.dispatchEvent(new CustomEvent('sectionChanged', {
+                detail: {
+                    section: sectionName,
+                    timestamp: new Date().toISOString()
+                }
+            }));
+
+            // ✅ FIX: Safe history update
+            try {
+                history.replaceState({ section: sectionName }, '', `#${sectionName}`);
+            } catch (error) {
+                console.warn('History replaceState failed:', error);
+            }
+
+            console.log(`✅ Section shown: ${sectionName}`);
+            return true;
+
+        }, `Show section: ${sectionName}`, false);
+    }
+
+    // 🛡️ FIXED ROLE-BASED ACCESS CONTROL
+    setupRoleBasedAccess() {
+        return this.safeExecute(() => {
+            const user = this.auth.getCurrentUser();
+            if (!user) {
+                console.warn('❌ No user found for role-based access');
+                return false;
+            }
+
+            const userRole = user.role;
+            console.log(`🔐 Setting up UI for role: ${userRole}`);
+
+            const rolePermissions = {
+                'admin': ['dashboard', 'users', 'employees', 'salary', 'attendance', 'salary-payments', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+                'manager': ['dashboard', 'employees', 'salary', 'attendance', 'salary-payments', 'reports', 'settings'],
+                'supervisor': ['dashboard', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+                'user': ['dashboard', 'settings']
+            };
+
+            const allowedSections = rolePermissions[userRole] || ['dashboard', 'settings'];
+
+            // Hide unauthorized sections
+            document.querySelectorAll('.nav-link').forEach(link => {
+                const section = link.getAttribute('data-section');
+                const parentLi = link.closest('li');
+
+                if (parentLi && section) {
+                    if (!allowedSections.includes(section)) {
+                        parentLi.style.display = 'none';
+                        console.log(`🚫 Hiding section: ${section} for role: ${userRole}`);
+                    } else {
+                        parentLi.style.display = 'block';
+                        console.log(`✅ Showing section: ${section} for role: ${userRole}`);
+                    }
+                }
+            });
+
+            console.log(`✅ Role-based access configured for ${userRole}`);
+            return true;
+
+        }, 'Role-based access setup', false);
+    }
+
+
+    // Add this method to UserManager
+    setupPasswordToggles() {
+        console.log('🔧 Setting up password toggles...');
+
+        // Remove any existing listeners first
+        document.querySelectorAll('.password-toggle').forEach(toggle => {
+            toggle.replaceWith(toggle.cloneNode(true));
+        });
+
+        // Add new event listeners
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.password-toggle')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const toggle = e.target.closest('.password-toggle');
+                this.togglePasswordVisibility(toggle);
+            }
+        });
+    }
+
+    // Add this method to handle the toggling
+    togglePasswordVisibility(toggleButton) {
+        try {
+            console.log('👁️ Toggling password visibility...');
+
+            const container = toggleButton.closest('.password-input-container');
+            if (!container) {
+                console.error('❌ Password container not found');
+                return;
+            }
+
+            const input = container.querySelector('input');
+            const icon = toggleButton.querySelector('i');
+
+            if (!input || !icon) {
+                console.error('❌ Input or icon not found');
+                return;
+            }
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+                toggleButton.title = 'Hide password';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+                toggleButton.title = 'Show password';
+            }
+
+            console.log('✅ Password visibility toggled to:', input.type);
         } catch (error) {
-            console.error('❌ UI initialization failed:', error);
-            throw error;
+            console.error('❌ Error toggling password:', error);
         }
     }
 
+    // 🛡️ EVENT HANDLING SYSTEM
     setupEventListeners() {
-        console.log('🔗 Setting up UI event listeners...');
+        console.log('🔗 Setting up event listeners...');
 
-        // Sidebar toggle
-        const sidebarToggle = document.getElementById('sidebarToggle');
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', () => this.toggleSidebar());
-        }
+        this.safeExecute(() => {
+            // Sidebar toggle
+            this.addEventListener('sidebarToggle', 'click', () => this.toggleSidebar());
 
-        // Navigation links
-        document.addEventListener('click', (e) => {
-            const navLink = e.target.closest('.nav-link');
-            if (navLink) {
+            // Navigation links
+            this.addGlobalEventListener('.nav-link', 'click', (e) => {
                 e.preventDefault();
-                const section = navLink.getAttribute('data-section');
-                this.showSection(section);
-            }
-
-            // Close modal when clicking outside
-            if (e.target.classList.contains('modal')) {
-                this.hideModal(e.target.id);
-            }
-        });
-
-        // Language selector
-        const languageSelect = document.getElementById('languageSelect');
-        if (languageSelect) {
-            languageSelect.addEventListener('change', (e) => {
-                this.langManager.switchLanguage(e.target.value);
+                const section = e.target.getAttribute('data-section') ||
+                    e.target.closest('[data-section]')?.getAttribute('data-section');
+                if (section) {
+                    this.showSection(section);
+                }
             });
-        }
 
-        // Window resize
-        window.addEventListener('resize', () => this.handleResize());
+            // ✅ FIX: Login form handler
+            this.addEventListener('loginForm', 'submit', (e) => {
+                e.preventDefault();
+                this.handleLoginFormSubmit(e);
+            });
 
-        // Escape key to close modals
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.hideAllModals();
+            // ✅ FIX: Logout button handler
+            this.addEventListener('logoutBtn', 'click', (e) => {
+                e.preventDefault();
+                this.handleLogout();
+            });
+
+            // ✅ ADD THIS: Password toggle handlers
+            this.addGlobalEventListener('.password-toggle', 'click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.togglePasswordVisibility(e.target.closest('.password-toggle'));
+            });
+
+            // Modal handlers
+            this.addGlobalEventListener('.modal', 'click', (e) => {
+                if (e.target === e.currentTarget) {
+                    this.hideModal(e.target.id);
+                }
+            });
+
+            // Escape key for modals
+            this.addEventListener(document, 'keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.hideAllModals();
+                }
+            });
+
+            // Window resize
+            this.addEventListener(window, 'resize', () => this.handleResize());
+
+            console.log('✅ Event listeners setup completed');
+        }, 'Event listeners setup');
+    }
+
+    // 🛡️ REST OF THE METHODS (identical to previous version - included for completeness)
+    addEventListener(selectorOrElement, event, handler) {
+        try {
+            const element = typeof selectorOrElement === 'string'
+                ? document.getElementById(selectorOrElement)
+                : selectorOrElement;
+
+            if (!element) {
+                console.warn(`⚠️ Element not found: ${selectorOrElement}`);
+                return;
             }
-        });
+
+            const wrappedHandler = (e) => this.safeExecute(() => handler(e), `Event: ${event}`);
+            element.addEventListener(event, wrappedHandler);
+
+            const key = `${typeof selectorOrElement === 'string' ? selectorOrElement : selectorOrElement.id}-${event}`;
+            this.eventListeners.set(key, { element, event, handler: wrappedHandler });
+
+        } catch (error) {
+            console.error(`❌ Failed to add event listener for ${selectorOrElement}:`, error);
+        }
+    }
+
+    addGlobalEventListener(selector, event, handler) {
+        try {
+            const wrappedHandler = (e) => {
+                if (e.target.matches(selector) || e.target.closest(selector)) {
+                    this.safeExecute(() => handler(e), `Global event: ${event} on ${selector}`);
+                }
+            };
+
+            document.addEventListener(event, wrappedHandler);
+            this.eventListeners.set(`global-${selector}-${event}`, {
+                element: document, event, handler: wrappedHandler
+            });
+
+        } catch (error) {
+            console.error(`❌ Failed to add global event listener for ${selector}:`, error);
+        }
     }
 
     setupModals() {
-        // Modal close buttons
-        document.querySelectorAll('.modal-close, .modal-cancel').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const modal = e.target.closest('.modal');
-                if (modal) {
-                    this.hideModal(modal.id);
+        console.log('🪟 Setting up modal system...');
+        this.safeExecute(() => {
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal-backdrop')) {
+                    const modal = e.target.closest('.modal');
+                    if (modal) {
+                        this.hideModal(modal.id);
+                    }
                 }
             });
-        });
+
+            document.addEventListener('click', (e) => {
+                const closeBtn = e.target.closest('.modal-close, .modal-cancel');
+                if (closeBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const modal = closeBtn.closest('.modal');
+                    if (modal) {
+                        this.hideModal(modal.id);
+                    }
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    this.hideAllModals();
+                }
+            });
+        }, 'Modal setup');
     }
 
-    // Role-based access control
-    setupRoleBasedAccess(userRole) {
-        console.log(`🔐 Setting up UI for role: ${userRole}`);
-
-        const rolePermissions = {
-            'admin': ['dashboard', 'users', 'employees', 'salary', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
-            'manager': ['dashboard', 'employees', 'salary', 'reports', 'settings'],
-            'supervisor': ['dashboard', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings']
-        };
-
-        const allowedSections = rolePermissions[userRole] || ['dashboard', 'settings'];
-
-        // Hide unauthorized sections
-        document.querySelectorAll('.nav-link').forEach(link => {
-            const section = link.getAttribute('data-section');
-            const parentLi = link.closest('li');
-
-            if (!allowedSections.includes(section)) {
-                parentLi.style.display = 'none';
-            } else {
-                parentLi.style.display = 'block';
-            }
-        });
-
-        this.updateUserInfo();
-        console.log(`✅ Role-based access configured for ${userRole}`);
-    }
-
-    updateUserInfo(user) {
-        const currentUser = user || this.auth?.getCurrentUser?.();
-        if (!currentUser) return;
-
-        const userName = document.getElementById('userName');
-        const userRole = document.getElementById('userRole');
-        const userAvatar = document.getElementById('userAvatar');
-        const settingsAvatar = document.getElementById('settingsAvatar');
-
-        if (userName) userName.textContent = currentUser.name;
-        if (userRole) userRole.textContent = currentUser.role;
-
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff&size=128`;
-        if (userAvatar) userAvatar.src = avatarUrl;
-        if (settingsAvatar) settingsAvatar.src = avatarUrl;
-    }
-
-    showAppReady() {
-        console.log('🎉 Application UI fully ready');
-        this.showToast('Application ready!', 'success');
-    }
-
-    toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) {
-            this.sidebarCollapsed = !this.sidebarCollapsed;
-            sidebar.classList.toggle('collapsed', this.sidebarCollapsed);
-            localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed);
-        }
-    }
-
-    handleResize() {
-        if (window.innerWidth <= 768) {
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar && !this.sidebarCollapsed) {
-                sidebar.classList.add('collapsed');
-                this.sidebarCollapsed = true;
-            }
-        }
-    }
-
-    showSection(sectionName) {
-        console.log(`📂 Showing section: ${sectionName}`);
-
-        // Hide all content sections
-        document.querySelectorAll('.content-section').forEach(section => {
-            section.classList.remove('active');
-        });
-
-        // Remove active class from all nav links
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
-        });
-
-        // Show the selected section
-        const targetSection = document.getElementById(sectionName + 'Content');
-        if (targetSection) {
-            targetSection.classList.add('active');
-        }
-
-        // Activate the corresponding nav link
-        const targetLink = document.querySelector(`[data-section="${sectionName}"]`);
-        if (targetLink) {
-            targetLink.classList.add('active');
-        }
-
-        this.currentSection = sectionName;
-
-        // Load section data via event
-        window.dispatchEvent(new CustomEvent('sectionChanged', {
-            detail: { section: sectionName }
-        }));
-
-        // Update browser history
-        history.pushState({ section: sectionName }, '', `#${sectionName}`);
-    }
-
-    // FIXED: Simple and reliable modal methods
     showModal(modalId) {
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-            console.log('✅ Modal shown:', modalId);
+        return this.safeExecute(() => {
+            const modal = document.getElementById(modalId);
+            if (!modal) return false;
 
-            // Debug: Log modal state
+            this.hideAllModals();
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+
             setTimeout(() => {
-                const closeBtn = modal.querySelector('.modal-close');
-                const cancelBtn = modal.querySelector('.modal-cancel');
-                console.log('🔍 Modal state:', {
-                    modalId: modalId,
-                    hidden: modal.classList.contains('hidden'),
-                    closeBtn: closeBtn ? 'EXISTS' : 'MISSING',
-                    cancelBtn: cancelBtn ? 'EXISTS' : 'MISSING'
-                });
-            }, 50);
-        }
+                const firstInput = modal.querySelector('input, select, textarea');
+                if (firstInput) firstInput.focus();
+            }, 100);
+
+            return true;
+        }, `Show modal: ${modalId}`, false);
     }
 
     hideModal(modalId) {
-        let modal;
-        if (typeof modalId === 'string') {
-            modal = document.getElementById(modalId);
-        } else {
-            modal = modalId;
-        }
+        return this.safeExecute(() => {
+            let modal;
+            if (typeof modalId === 'string') {
+                modal = document.getElementById(modalId);
+            } else {
+                modal = modalId;
+            }
 
-        if (modal) {
-            modal.classList.add('hidden');
-            document.body.style.overflow = '';
-            console.log('✅ Modal hidden:', modal.id || modalId);
-        }
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('active');
+                modal.style.display = 'none';
+
+                if (document.querySelectorAll('.modal:not(.hidden)').length === 0) {
+                    document.body.style.overflow = '';
+                }
+                return true;
+            }
+            return false;
+        }, `Hide modal: ${modalId}`, false);
     }
 
     hideAllModals() {
-        document.querySelectorAll('.modal').forEach(modal => {
-            this.hideModal(modal.id);
-        });
+        this.safeExecute(() => {
+            document.querySelectorAll('.modal').forEach(modal => {
+                this.hideModal(modal.id);
+            });
+        }, 'Hide all modals');
     }
 
-    // FIXED: Toast method
-    showToast(message, type = 'success') {
-        // Create toast container if it doesn't exist
-        let toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toast-container';
-            toastContainer.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 10000;
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-            `;
-            document.body.appendChild(toastContainer);
-        }
-
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.style.cssText = `
-            padding: 12px 20px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 500;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transform: translateX(100%);
-            transition: transform 0.3s ease;
-            max-width: 300px;
-        `;
-
-        const colors = {
-            success: '#28a745',
-            error: '#dc3545',
-            warning: '#ffc107',
-            info: '#17a2b8'
-        };
-        toast.style.background = colors[type] || colors.info;
-        toast.textContent = message;
-
-        toastContainer.appendChild(toast);
-
-        // Animate in
-        setTimeout(() => {
-            toast.style.transform = 'translateX(0)';
-        }, 100);
-
-        // Auto remove
-        setTimeout(() => {
-            toast.style.transform = 'translateX(100%)';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
-        }, 3000);
-    }
-
-    updateDashboardStats(stats) {
-        const elements = {
-            'totalBalance': stats.totalSales,
-            'gstAmount': stats.totalGST,
-            'recentActivity': stats.recentActivity,
-            'pendingPayments': stats.pendingPayments,
-            'totalCustomers': stats.totalCustomers,
-            'totalEmployees': stats.totalEmployees
-        };
-
-        Object.entries(elements).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element) {
-                if (id.includes('Balance') || id.includes('Amount')) {
-                    element.textContent = Utils.formatCurrency(value || 0);
-                } else {
-                    element.textContent = Utils.formatNumber(value || 0);
-                }
+    showToast(message, type = 'info', duration = 5000) {
+        return this.safeExecute(() => {
+            let toastContainer = document.getElementById('toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toast-container';
+                toastContainer.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 10000;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    max-width: 400px;
+                `;
+                document.body.appendChild(toastContainer);
             }
-        });
-    }
 
-    showLoading(message = 'Loading...') {
-        Utils.showLoading(message);
-    }
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
 
-    hideLoading() {
-        Utils.hideLoading();
+            const colors = {
+                success: '#10b981',
+                error: '#ef4444',
+                warning: '#f59e0b',
+                info: '#3b82f6'
+            };
+
+            toast.style.cssText = `
+                padding: 12px 16px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transform: translateX(100%);
+                transition: all 0.3s ease;
+                background: ${colors[type] || colors.info};
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            `;
+
+            const icons = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-exclamation-circle',
+                warning: 'fas fa-exclamation-triangle',
+                info: 'fas fa-info-circle'
+            };
+
+            toast.innerHTML = `
+                <i class="${icons[type] || icons.info}"></i>
+                <span>${this.escapeHtml(message)}</span>
+            `;
+
+            toastContainer.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.style.transform = 'translateX(0)';
+            });
+
+            const removeToast = () => {
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            };
+
+            setTimeout(removeToast, duration);
+            toast.addEventListener('click', removeToast);
+
+            return true;
+        }, `Show toast: ${message}`, false);
     }
 
     showButtonLoading(button, text = 'Loading...') {
-        const originalHTML = button.innerHTML;
-        const originalText = button.textContent;
+        return this.safeExecute(() => {
+            if (!button) return () => { };
 
-        button.disabled = true;
-        button.innerHTML = `
-            <i class="fas fa-spinner fa-spin"></i>
-            ${text}
-        `;
+            const originalHTML = button.innerHTML;
+            const originalDisabled = button.disabled;
 
-        return () => {
-            button.disabled = false;
-            button.innerHTML = originalHTML;
-            button.textContent = originalText;
-        };
+            button.disabled = true;
+            button.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                ${this.escapeHtml(text)}
+            `;
+
+            return () => {
+                this.safeExecute(() => {
+                    button.disabled = originalDisabled;
+                    button.innerHTML = originalHTML;
+                }, 'Reset button loading');
+            };
+        }, 'Show button loading', () => () => { });
     }
 
     showSectionLoading(sectionId, message = 'Loading...') {
-        const section = document.getElementById(sectionId);
-        if (!section) return;
+        return this.safeExecute(() => {
+            const section = document.getElementById(sectionId);
+            if (!section) {
+                console.warn(`Section not found: ${sectionId}`);
+                return null;
+            }
 
-        let loader = section.querySelector('.section-loader');
-        if (!loader) {
-            loader = document.createElement('div');
+            const existingLoader = section.querySelector('.section-loader');
+            if (existingLoader) {
+                existingLoader.remove();
+            }
+
+            const loader = document.createElement('div');
             loader.className = 'section-loader';
             loader.innerHTML = `
                 <div class="section-loading-content">
                     <i class="fas fa-spinner fa-spin"></i>
-                    <p>${message}</p>
+                    <p>${this.escapeHtml(message)}</p>
                 </div>
             `;
+
             loader.style.cssText = `
                 position: absolute;
                 top: 0;
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background: rgba(255, 255, 255, 0.9);
+                background: rgba(255, 255, 255, 0.95);
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 z-index: 100;
                 border-radius: 8px;
+                backdrop-filter: blur(2px);
             `;
+
             section.style.position = 'relative';
             section.appendChild(loader);
-        }
 
-        loader.style.display = 'flex';
-        return loader;
+            console.log(`✅ Section loading shown: ${sectionId}`);
+            return loader;
+
+        }, `Show section loading: ${sectionId}`, null);
     }
 
     hideSectionLoading(sectionId) {
-        const section = document.getElementById(sectionId);
-        if (!section) return;
+        return this.safeExecute(() => {
+            const section = document.getElementById(sectionId);
+            if (!section) return false;
 
-        const loader = section.querySelector('.section-loader');
-        if (loader) {
-            loader.style.display = 'none';
-        }
-    }
-
-    updateDatabaseStatus(connected) {
-        let statusElement = document.getElementById('dbStatus');
-        if (!statusElement) {
-            statusElement = document.createElement('div');
-            statusElement.id = 'dbStatus';
-            statusElement.className = `db-status ${connected ? 'connected' : 'disconnected'}`;
-            const topbarRight = document.querySelector('.topbar-right');
-            if (topbarRight) {
-                topbarRight.appendChild(statusElement);
+            const loader = section.querySelector('.section-loader');
+            if (loader) {
+                loader.remove();
+                console.log(`✅ Section loading hidden: ${sectionId}`);
+                return true;
             }
-        }
-
-        statusElement.className = `db-status ${connected ? 'connected' : 'disconnected'}`;
-        statusElement.innerHTML = connected ?
-            '<i class="fas fa-database"></i> Online' :
-            '<i class="fas fa-database"></i> Offline';
+            return false;
+        }, `Hide section loading: ${sectionId}`, false);
     }
 
-    // Form validation helpers
-    validateEmail(email) {
-        return Utils.validateEmail(email);
+    showLoading(message = 'Loading...') {
+        return this.safeExecute(() => {
+            let overlay = document.getElementById('loadingOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'loadingOverlay';
+                overlay.innerHTML = `
+                    <div class="loading-container">
+                        <div class="loading-spinner">
+                            <div class="loading-ring"></div>
+                            <i class="fas fa-chart-line loader-icon"></i>
+                        </div>
+                        <p class="loading-text">${this.escapeHtml(message)}</p>
+                    </div>
+                `;
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.7);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 9999;
+                    flex-direction: column;
+                    backdrop-filter: blur(5px);
+                `;
+                document.body.appendChild(overlay);
+            } else {
+                overlay.style.display = 'flex';
+                const textElement = overlay.querySelector('.loading-text');
+                if (textElement) {
+                    textElement.textContent = message;
+                }
+            }
+            return true;
+        }, 'Show loading', false);
     }
 
-    validatePhone(phone) {
-        return Utils.validatePhone(phone);
+    hideLoading() {
+        return this.safeExecute(() => {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                return true;
+            }
+            return false;
+        }, 'Hide loading', false);
+    }
+
+    updateUserInfo(user) {
+        return this.safeExecute(() => {
+            const currentUser = user || this.auth.getCurrentUser();
+            if (!currentUser) return false;
+
+            const userNameElement = document.getElementById('userName');
+            if (userNameElement) {
+                userNameElement.textContent = currentUser.name;
+            }
+
+            const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff&size=128`;
+            document.querySelectorAll('.user-avatar').forEach(avatar => {
+                if (avatar.src) {
+                    avatar.src = avatarUrl;
+                }
+            });
+
+            console.log('✅ User info updated');
+            return true;
+        }, 'Update user info', false);
+    }
+
+    toggleSidebar() {
+        return this.safeExecute(() => {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) {
+                this.sidebarCollapsed = !this.sidebarCollapsed;
+                sidebar.classList.toggle('collapsed', this.sidebarCollapsed);
+                localStorage.setItem('sidebarCollapsed', this.sidebarCollapsed);
+                console.log('✅ Sidebar toggled:', this.sidebarCollapsed ? 'collapsed' : 'expanded');
+                return true;
+            }
+            return false;
+        }, 'Toggle sidebar', false);
+    }
+
+    handleResize() {
+        this.safeExecute(() => {
+            if (window.innerWidth <= 768) {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar && !this.sidebarCollapsed) {
+                    sidebar.classList.add('collapsed');
+                    this.sidebarCollapsed = true;
+                }
+            }
+        }, 'Handle resize');
+    }
+
+    updateDashboardStats(stats = {}) {
+        return this.safeExecute(() => {
+            const defaultStats = {
+                totalSales: 0,
+                totalGST: 0,
+                recentActivity: 0,
+                pendingPayments: 0,
+                totalCustomers: 0,
+                totalEmployees: 0
+            };
+
+            const safeStats = { ...defaultStats, ...stats };
+
+            const elements = {
+                'totalBalance': this.formatCurrency(safeStats.totalSales),
+                'gstAmount': this.formatCurrency(safeStats.totalGST),
+                'recentActivity': this.formatNumber(safeStats.recentActivity),
+                'pendingPayments': this.formatNumber(safeStats.pendingPayments),
+                'totalCustomers': this.formatNumber(safeStats.totalCustomers),
+                'totalEmployees': this.formatNumber(safeStats.totalEmployees)
+            };
+
+            let updatedCount = 0;
+            Object.entries(elements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.textContent = value;
+                    updatedCount++;
+                }
+            });
+
+            console.log(`✅ Dashboard stats updated: ${updatedCount} elements`);
+            return updatedCount > 0;
+
+        }, 'Update dashboard stats', false);
     }
 
     showFormError(input, message) {
-        this.hideFormError(input);
+        return this.safeExecute(() => {
+            if (!input || !(input instanceof Element)) {
+                console.warn('Invalid input for form error');
+                return false;
+            }
 
-        const errorElement = document.createElement('div');
-        errorElement.className = 'form-error';
-        errorElement.textContent = message;
-        errorElement.style.cssText = `
-            color: var(--danger-color);
-            font-size: 0.8rem;
-            margin-top: 0.25rem;
-        `;
+            this.hideFormError(input);
 
-        input.style.borderColor = 'var(--danger-color)';
-        input.parentNode.appendChild(errorElement);
+            const errorElement = document.createElement('div');
+            errorElement.className = 'form-error';
+            errorElement.textContent = message;
+            errorElement.style.cssText = `
+                color: #ef4444;
+                font-size: 0.8rem;
+                margin-top: 0.25rem;
+                font-weight: 500;
+            `;
+
+            input.style.borderColor = '#ef4444';
+            input.parentNode.appendChild(errorElement);
+
+            return true;
+
+        }, 'Show form error', false);
     }
 
     hideFormError(input) {
-        const existingError = input.parentNode.querySelector('.form-error');
-        if (existingError) {
-            existingError.remove();
-        }
-        input.style.borderColor = '';
+        return this.safeExecute(() => {
+            if (!input || !(input instanceof Element)) return false;
+
+            const existingError = input.parentNode.querySelector('.form-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            input.style.borderColor = '';
+            return true;
+
+        }, 'Hide form error', false);
     }
 
-    // Table helpers
-    renderTable(tbodyId, data, rowRenderer) {
-        const tbody = document.getElementById(tbodyId);
-        if (!tbody) return;
-
-        if (!data || data.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="100" class="no-data" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem; display: block; opacity: 0.5;"></i>
-                        No data available
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        tbody.innerHTML = data.map(rowRenderer).join('');
+    validateEmail(email) {
+        return this.safeExecute(() => {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }, 'Validate email', false);
     }
 
-    // Export progress
+    validatePhone(phone) {
+        return this.safeExecute(() => {
+            const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
+            return phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ''));
+        }, 'Validate phone', false);
+    }
+
+    renderTable(tbodyId, data = [], rowRenderer) {
+        return this.safeExecute(() => {
+            const tbody = document.getElementById(tbodyId);
+            if (!tbody) {
+                console.warn(`Table body not found: ${tbodyId}`);
+                return false;
+            }
+
+            if (!Array.isArray(data)) {
+                console.warn('Invalid data provided for table render');
+                data = [];
+            }
+
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="100" class="no-data" style="text-align: center; padding: 3rem; color: #6b7280;">
+                            <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 1rem; display: block; opacity: 0.3;"></i>
+                            <div style="font-size: 1.1rem; margin-bottom: 0.5rem;">No data available</div>
+                            <div style="font-size: 0.9rem; opacity: 0.7;">There's nothing to display at the moment</div>
+                        </td>
+                    </tr>
+                `;
+                return true;
+            }
+
+            if (typeof rowRenderer !== 'function') {
+                console.warn('Invalid row renderer provided');
+                return false;
+            }
+
+            try {
+                tbody.innerHTML = data.map((row, index) => {
+                    try {
+                        return rowRenderer(row, index);
+                    } catch (error) {
+                        console.error(`Row renderer failed for index ${index}:`, error);
+                        return `<tr><td colspan="100" style="color: #ef4444;">Error rendering row</td></tr>`;
+                    }
+                }).join('');
+
+                console.log(`✅ Table rendered: ${tbodyId} with ${data.length} rows`);
+                return true;
+
+            } catch (error) {
+                console.error('Table rendering failed:', error);
+                tbody.innerHTML = `<tr><td colspan="100" style="color: #ef4444;">Error rendering table</td></tr>`;
+                return false;
+            }
+
+        }, `Render table: ${tbodyId}`, false);
+    }
+
+    updateDatabaseStatus(connected) {
+        return this.safeExecute(() => {
+            let statusElement = document.getElementById('dbStatus');
+
+            if (!statusElement) {
+                statusElement = document.createElement('div');
+                statusElement.id = 'dbStatus';
+                const topbarRight = document.querySelector('.topbar-right') || document.body;
+                topbarRight.appendChild(statusElement);
+            }
+
+            statusElement.className = `db-status ${connected ? 'connected' : 'disconnected'}`;
+            statusElement.innerHTML = connected ?
+                '<i class="fas fa-database"></i> Online' :
+                '<i class="fas fa-database"></i> Offline';
+
+            statusElement.title = connected ?
+                'Connected to cloud database' :
+                'Using local storage - data will sync when online';
+
+            console.log(`✅ Database status updated: ${connected ? 'Online' : 'Offline'}`);
+            return true;
+
+        }, 'Update database status', false);
+    }
+
     showExportProgress(message = 'Exporting...') {
-        this.showLoading(message);
+        return this.safeExecute(() => {
+            this.showLoading(message);
+            return true;
+        }, 'Show export progress', false);
     }
 
     hideExportProgress() {
-        this.hideLoading();
+        return this.safeExecute(() => {
+            this.hideLoading();
+            return true;
+        }, 'Hide export progress', false);
     }
 
-    // Initialize from saved state
     initializeFromSavedState() {
-        // Restore sidebar state
-        const savedSidebarState = localStorage.getItem('sidebarCollapsed');
-        if (savedSidebarState === 'true') {
-            this.sidebarCollapsed = true;
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) {
-                sidebar.classList.add('collapsed');
+        return this.safeExecute(() => {
+            if (this.sidebarCollapsed) {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar) {
+                    sidebar.classList.add('collapsed');
+                }
             }
-        }
 
-        // Restore section from URL hash
-        const hash = window.location.hash.replace('#', '');
-        if (hash) {
-            this.showSection(hash);
-        }
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme && this.themeManager.switchTheme) {
+                this.themeManager.switchTheme(savedTheme);
+            }
+
+            const savedLanguage = localStorage.getItem('language');
+            if (savedLanguage && this.langManager.switchLanguage) {
+                this.langManager.switchLanguage(savedLanguage);
+            }
+
+            console.log('✅ Saved state initialized');
+            return true;
+
+        }, 'Initialize from saved state', false);
     }
 
-    // Cleanup
+    formatCurrency(amount) {
+        return this.safeExecute(() => {
+            if (typeof amount !== 'number') {
+                amount = parseFloat(amount) || 0;
+            }
+            return '₹' + amount.toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }, 'Format currency', '₹0.00');
+    }
+
+    formatNumber(number) {
+        return this.safeExecute(() => {
+            if (typeof number !== 'number') {
+                number = parseInt(number) || 0;
+            }
+            return number.toLocaleString('en-IN');
+        }, 'Format number', '0');
+    }
+
+    escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return String(unsafe);
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    showAppReady() {
+        return this.safeExecute(() => {
+            this.showToast('Application ready!', 'success', 2000);
+            console.log('🎉 Application UI fully ready');
+            return true;
+        }, 'Show app ready', false);
+    }
+
+    createThemeManagerFallback() {
+        return {
+            switchTheme: (theme) => this.safeExecute(() => {
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+            }, 'Theme switch'),
+            getCurrentTheme: () => this.safeExecute(() =>
+                localStorage.getItem('theme') || 'light', 'Get theme', 'light'
+            )
+        };
+    }
+
+    createLangManagerFallback() {
+        return {
+            switchLanguage: (lang) => this.safeExecute(() => {
+                document.documentElement.setAttribute('lang', lang);
+                localStorage.setItem('language', lang);
+            }, 'Language switch'),
+            getCurrentLanguage: () => this.safeExecute(() =>
+                localStorage.getItem('language') || 'en', 'Get language', 'en'
+            )
+        };
+    }
+
     cleanup() {
-        document.querySelectorAll('.section-loader').forEach(loader => {
-            loader.remove();
+        console.log('🧹 Cleaning up UI manager...');
+
+        this.eventListeners.forEach(({ element, event, handler }) => {
+            try {
+                element.removeEventListener(event, handler);
+            } catch (error) {
+                console.warn('Failed to remove event listener:', error);
+            }
+        });
+        this.eventListeners.clear();
+
+        this.initialized = false;
+        console.log('✅ UI manager cleaned up');
+    }
+
+    healthCheck() {
+        const checks = {
+            initialized: this.initialized,
+            authenticated: this.isAuthenticated,
+            domReady: document.readyState === 'complete',
+            eventListeners: this.eventListeners.size
+        };
+
+        const allHealthy = checks.initialized && checks.domReady;
+
+        console.log('🏥 UI Health Check:', {
+            status: allHealthy ? 'HEALTHY' : 'UNHEALTHY',
+            ...checks
         });
 
-        const toastContainer = document.getElementById('toast-container');
-        if (toastContainer) {
-            toastContainer.remove();
-        }
+        return allHealthy;
     }
 }
 

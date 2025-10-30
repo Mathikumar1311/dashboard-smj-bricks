@@ -16,45 +16,154 @@ class UserManager {
 
     setupEventListeners() {
         console.log('🔧 Setting up UserManager event listeners...');
-        
+
+        // Remove any existing listeners first
+        this.cleanup();
+
         // Use event delegation for dynamic elements
         document.addEventListener('click', (e) => {
             // Add User button
             if (e.target.id === 'addUserBtn' || e.target.closest('#addUserBtn')) {
                 e.preventDefault();
+                e.stopPropagation(); // Prevent event bubbling
+                console.log('🎯 Add User button clicked');
                 this.showAddUserModal();
             }
-            
+
             // Export Users button
             if (e.target.id === 'exportUsersBtn' || e.target.closest('#exportUsersBtn')) {
                 e.preventDefault();
+                e.stopPropagation(); // Prevent event bubbling
                 this.exportUsers();
             }
         });
 
+        // COMPLETE WORKING PASSWORD TOGGLE SOLUTION
+        class PasswordToggle {
+            static init() {
+                console.log('🔧 Initializing PasswordToggle...');
+
+                // Method 1: Event delegation (works for dynamic content)
+                document.addEventListener('click', (e) => {
+                    if (e.target.closest('.password-toggle')) {
+                        PasswordToggle.handleToggle(e.target.closest('.password-toggle'));
+                    }
+                });
+
+                // Method 2: Direct event listeners (as backup)
+                document.querySelectorAll('.password-toggle').forEach(toggle => {
+                    toggle.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        PasswordToggle.handleToggle(toggle);
+                    });
+                });
+
+                console.log('✅ PasswordToggle initialized');
+            }
+
+            static handleToggle(toggle) {
+                console.log('👁️ Handling password toggle...');
+
+                const container = toggle.closest('.password-input-container');
+                if (!container) {
+                    console.error('❌ Container not found');
+                    return;
+                }
+
+                const input = container.querySelector('input');
+                const icon = toggle.querySelector('i');
+
+                if (!input || !icon) {
+                    console.error('❌ Input or icon not found');
+                    return;
+                }
+
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.className = 'fas fa-eye-slash';
+                    console.log('✅ Password shown');
+                } else {
+                    input.type = 'password';
+                    icon.className = 'fas fa-eye';
+                    console.log('✅ Password hidden');
+                }
+            }
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => PasswordToggle.init());
+        } else {
+            PasswordToggle.init();
+        }
+
         // User form submission
         const userForm = document.getElementById('userForm');
-        if (userForm && !userForm._listenerAttached) {
+        if (userForm) {
+            // Remove existing listener first
+            userForm.removeEventListener('submit', this.handleUserSubmit);
             userForm.addEventListener('submit', (e) => this.handleUserSubmit(e));
-            userForm._listenerAttached = true;
         }
 
         // Search functionality
         const userSearch = document.getElementById('userSearch');
-        if (userSearch && !userSearch._listenerAttached) {
+        if (userSearch) {
+            userSearch.removeEventListener('input', this.searchUsers);
             userSearch.addEventListener('input', (e) => this.searchUsers(e.target.value));
-            userSearch._listenerAttached = true;
         }
 
-        // Modal close/cancel buttons
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal-cancel') || 
-                e.target.classList.contains('modal-close')) {
-                this.ui.hideModal('userModal');
-            }
-        });
+        // ❌ REMOVE THIS - Let UIManager handle all modal closing
+        // Modal close/cancel buttons are now handled by UIManager
 
         console.log('✅ UserManager event listeners setup complete');
+    }
+
+    showAddUserModal() {
+        console.log('🔄 Checking permissions for adding user...');
+
+        if (!this.auth.hasPermission('admin')) {
+            this.ui.showToast('Insufficient permissions to create users', 'error');
+            return;
+        }
+
+        // Use the UI manager to handle ALL modal operations
+        this.ui.showModal('userModal');
+
+        // Small delay to ensure modal is fully rendered
+        setTimeout(() => {
+            this.safeExecute(() => {
+                const modalTitle = document.getElementById('userModalTitle');
+                const userForm = document.getElementById('userForm');
+                const editUserId = document.getElementById('editUserId');
+                const userStatus = document.getElementById('userStatus');
+                const userRole = document.getElementById('userRole');
+                const userPassword = document.getElementById('userPassword');
+                const userConfirmPassword = document.getElementById('userConfirmPassword');
+
+                if (modalTitle) modalTitle.textContent = 'Add User';
+                if (userForm) userForm.reset();
+                if (editUserId) editUserId.value = '';
+                if (userStatus) userStatus.value = 'active';
+                if (userRole) userRole.value = 'user';
+
+                // ✅ NEW: Clear password fields
+                if (userPassword) userPassword.value = '';
+                if (userConfirmPassword) userConfirmPassword.value = '';
+
+                console.log('✅ Add user modal fully initialized');
+            });
+        }, 50);
+    }
+
+    // Add this safeExecute method to UserManager
+    safeExecute(operation, context = 'operation') {
+        try {
+            return operation();
+        } catch (error) {
+            console.error(`❌ ${context} failed:`, error);
+            return null;
+        }
     }
 
     async loadUsers() {
@@ -96,7 +205,7 @@ class UserManager {
         }
 
         const currentUser = this.auth.getCurrentUser();
-        
+
         tbody.innerHTML = users.map(user => `
             <tr>
                 <td>
@@ -158,22 +267,43 @@ class UserManager {
 
     showAddUserModal() {
         console.log('🔄 Checking permissions for adding user...');
-        
+
         if (!this.auth.hasPermission('admin')) {
             this.ui.showToast('Insufficient permissions to create users', 'error');
             return;
         }
 
+        // Use the UI manager to handle ALL modal operations
         this.ui.showModal('userModal');
-        document.getElementById('userModalTitle').textContent = 'Add User';
-        document.getElementById('userForm').reset();
-        document.getElementById('editUserId').value = '';
 
-        // Set default values
-        document.getElementById('userStatus').value = 'active';
-        document.getElementById('userRole').value = 'user';
-        
-        console.log('✅ Add user modal shown');
+        // Small delay to ensure modal is fully rendered
+        setTimeout(() => {
+            this.safeExecute(() => {
+                const modalTitle = document.getElementById('userModalTitle');
+                const userForm = document.getElementById('userForm');
+                const editUserId = document.getElementById('editUserId');
+                const userStatus = document.getElementById('userStatus');
+                const userRole = document.getElementById('userRole');
+
+                if (modalTitle) modalTitle.textContent = 'Add User';
+                if (userForm) userForm.reset();
+                if (editUserId) editUserId.value = '';
+                if (userStatus) userStatus.value = 'active';
+                if (userRole) userRole.value = 'user';
+
+                console.log('✅ Add user modal fully initialized');
+            });
+        }, 50);
+    }
+
+    // Add this safeExecute method to UserManager
+    safeExecute(operation, context = 'operation') {
+        try {
+            return operation();
+        } catch (error) {
+            console.error(`❌ ${context} failed:`, error);
+            return null;
+        }
     }
 
     async editUser(userId) {
@@ -194,6 +324,14 @@ class UserManager {
                 document.getElementById('userPhone').value = user.phone || '';
                 document.getElementById('userRole').value = user.role;
                 document.getElementById('userStatus').value = user.status || 'active';
+
+                // ✅ NEW: Clear password fields when editing
+                document.getElementById('userPassword').value = '';
+                document.getElementById('userConfirmPassword').value = '';
+
+                // ✅ NEW: Add placeholder to indicate optional password change
+                document.getElementById('userPassword').placeholder = 'Leave blank to keep current password';
+                document.getElementById('userConfirmPassword').placeholder = 'Leave blank to keep current password';
 
                 this.ui.showModal('userModal');
             } else {
@@ -222,10 +360,32 @@ class UserManager {
         const role = document.getElementById('userRole').value;
         const status = document.getElementById('userStatus').value;
 
+        // ✅ NEW: Get password fields
+        const password = document.getElementById('userPassword').value;
+        const confirmPassword = document.getElementById('userConfirmPassword').value;
+
         // Validate inputs
         if (!name) {
             this.ui.showToast('Name is required', 'error');
             return;
+        }
+
+        // ✅ NEW: Password validation for new users
+        if (!userId) { // Only validate password for new users
+            if (!password) {
+                this.ui.showToast('Password is required', 'error');
+                return;
+            }
+
+            if (password.length < 6) {
+                this.ui.showToast('Password must be at least 6 characters long', 'error');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                this.ui.showToast('Passwords do not match', 'error');
+                return;
+            }
         }
 
         if (email && !this.validateEmail(email)) {
@@ -239,8 +399,8 @@ class UserManager {
         }
 
         const button = e.target.querySelector('button[type="submit"]');
-        const resetButton = this.ui.showButtonLoading ? 
-            this.ui.showButtonLoading(button, 'Saving...') : 
+        const resetButton = this.ui.showButtonLoading ?
+            this.ui.showButtonLoading(button, 'Saving...') :
             () => { if (button) button.disabled = false; };
 
         try {
@@ -254,13 +414,25 @@ class UserManager {
             };
 
             if (userId) {
-                // Update existing user
+                // Update existing user - only update password if provided
+                if (password) {
+                    if (password.length < 6) {
+                        this.ui.showToast('Password must be at least 6 characters long', 'error');
+                        return;
+                    }
+                    if (password !== confirmPassword) {
+                        this.ui.showToast('Passwords do not match', 'error');
+                        return;
+                    }
+                    userData.password = password;
+                }
+
                 await this.db.update('users', userId, userData);
                 this.ui.showToast('User updated successfully', 'success');
             } else {
                 // Create new user
                 userData.username = this.generateUsername(name);
-                userData.password = 'default123'; // Default password
+                userData.password = password; // ✅ Use the provided password
                 userData.created_at = new Date().toISOString();
 
                 await this.db.create('users', userData);
@@ -325,7 +497,7 @@ class UserManager {
     async exportUsers() {
         try {
             console.log('📤 Starting user export...');
-            
+
             // Show export progress
             if (this.ui.showExportProgress) {
                 this.ui.showExportProgress('Preparing user data...');
@@ -361,7 +533,7 @@ class UserManager {
 
             this.ui.showToast('Users exported successfully', 'success');
             console.log('✅ User export completed');
-            
+
         } catch (error) {
             console.error('❌ Error exporting users:', error);
             this.ui.showToast('Error exporting users: ' + error.message, 'error');
@@ -377,25 +549,25 @@ class UserManager {
     fallbackExport(data, filename) {
         // Simple CSV export fallback
         if (!data || data.length === 0) return;
-        
+
         const headers = Object.keys(data[0]);
         const csvContent = [
             headers.join(','),
-            ...data.map(row => 
-                headers.map(header => 
+            ...data.map(row =>
+                headers.map(header =>
                     `"${String(row[header] || '').replace(/"/g, '""')}"`
                 ).join(',')
             )
         ].join('\n');
-        
+
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
-        
+
         link.setAttribute('href', url);
         link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
         link.style.visibility = 'hidden';
-        
+
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

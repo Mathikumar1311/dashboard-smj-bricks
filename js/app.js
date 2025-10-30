@@ -280,8 +280,44 @@ class BusinessDashboard {
         this.initializationPromise = null;
         this.managers = {};
         this.updateManager = null;
+        this.db = null;
+        this.auth = null;
+        this.ui = null;
     }
 
+
+    // ADD THIS METHOD TO BusinessDashboard class
+    updateSidebarVisibility(userRole) {
+        console.log('🔧 Updating sidebar visibility for role:', userRole);
+
+        // Define which roles can see which items
+        const rolePermissions = {
+            'admin-only': ['admin'],
+            'admin-manager': ['admin', 'manager'],
+            'admin-supervisor': ['admin', 'supervisor', 'manager'] // Allow manager to see supervisor items too
+        };
+
+        // Apply visibility rules
+        Object.entries(rolePermissions).forEach(([className, allowedRoles]) => {
+            const items = document.querySelectorAll(`.${className}`);
+            items.forEach(item => {
+                const shouldShow = allowedRoles.includes(userRole);
+                item.style.display = shouldShow ? 'list-item' : 'none';
+                console.log(`📋 ${className}: ${shouldShow ? 'SHOW' : 'HIDE'}`);
+            });
+        });
+
+        // Always show dashboard, reports, and settings to everyone
+        const alwaysShow = ['dashboard', 'reports', 'settings'];
+        alwaysShow.forEach(section => {
+            const item = document.querySelector(`[data-section="${section}"]`).closest('li');
+            if (item) {
+                item.style.display = 'list-item';
+            }
+        });
+
+        console.log('✅ Sidebar visibility updated for role:', userRole);
+    }
     async initialize() {
         if (this.initializationPromise) {
             return this.initializationPromise;
@@ -371,22 +407,20 @@ class BusinessDashboard {
         console.log('✅ Database initialized');
     }
 
-    // In BusinessDashboard.js - use old version but fix this line:
-async initializeAuth() {
-    console.log('🔐 Initializing authentication...');
-    
-    // FIX: Pass db only (like old version) but ensure UI is available if needed
-    this.auth = new AuthManager({
-        db: this.db,
-        ui: this.ui // Only if AuthManager actually uses UI in constructor
-    });
-    
-    // OR if AuthManager only needs db:
-    this.auth = new AuthManager(this.db);
-    
-    await this.auth.initialize();
-    console.log('✅ Authentication initialized');
-}
+    async initializeAuth() {
+        console.log('🔐 Initializing authentication...');
+
+        this.auth = new AuthManager(this.db);
+        await this.auth.initialize();
+
+        // ✅ ADD THIS: Update sidebar after auth
+        const currentUser = this.auth.getCurrentUser();
+        if (currentUser) {
+            this.updateSidebarVisibility(currentUser.role);
+        }
+
+        console.log('✅ Authentication initialized');
+    }
 
     async initializeUI() {
         console.log('🎨 Initializing UI...');
@@ -421,10 +455,14 @@ async initializeAuth() {
             });
 
             // ✅ INITIALIZE MANAGERS WITH CORRECT NAMES
+            // In initializeBusinessManagers method
             this.managers = {
                 user: new UserManager(dependencies),
                 employee: new EmployeeManager(dependencies),
+                salary: new SalaryManager(dependencies), // Make sure this exists
                 billing: new BillingManager(dependencies),
+                customer: new CustomerManager(dependencies),
+                attendance: new AttendanceManager(dependencies),
                 reports: new ReportsManager(dependencies),
                 export: new ExportManager(dependencies),
                 settings: new SettingsManager(dependencies)
@@ -436,6 +474,8 @@ async initializeAuth() {
                     if (manager && typeof manager.initialize === 'function') {
                         await manager.initialize();
                         console.log(`✅ ${key} manager initialized`);
+                    } else {
+                        console.log(`⚠️ ${key} manager has no initialize method or is undefined`);
                     }
                 } catch (error) {
                     console.error(`❌ Failed to initialize ${key} manager:`, error);
@@ -457,8 +497,6 @@ async initializeAuth() {
             throw error;
         }
     }
-
-
 
     setupSectionListeners() {
         window.addEventListener('sectionChanged', (event) => {
@@ -515,15 +553,23 @@ async initializeAuth() {
                 console.warn('User not authenticated, skipping data load');
                 return;
             }
+            this.updateSidebarVisibility(currentUser.role);
+            // Check permissions
+            if (this.auth.canAccessSection && !this.auth.canAccessSection(sectionId)) {
+                this.ui.showToast('You do not have permission to access this section', 'error');
+                return;
+            }
 
-            // ✅ FIX: Add dashboard to managerMap with null value (handled by BusinessDashboard)
+            // ✅ FIXED: Updated manager map with new managers
             const managerMap = {
-                'dashboard': null, // Dashboard is handled by BusinessDashboard itself
+                'dashboard': null,
                 'users': 'user',
                 'employees': 'employee',
-                'salary': 'employee',
+                'salary': 'salary',
+                'attendance': 'attendance',
+                'salary-payments': 'salary', // Use salary manager for salary-payments too
                 'billing': 'billing',
-                'customers': 'billing',
+                'customers': 'customer',
                 'pending': 'billing',
                 'payments': 'billing',
                 'reports': 'reports',
@@ -532,7 +578,7 @@ async initializeAuth() {
 
             const managerName = managerMap[sectionId];
 
-            // ✅ FIX: Handle dashboard separately
+            // Handle dashboard separately
             if (sectionId === 'dashboard') {
                 await this.loadDashboardData();
                 return;
@@ -557,7 +603,12 @@ async initializeAuth() {
                     if (manager.setupSalaryForm) {
                         manager.setupSalaryForm();
                     }
-                    await manager.loadSalaries();
+                    await manager.loadSalaryData();
+                    break;
+                case 'attendance':
+                    if (manager.loadAttendanceRecords) {
+                        await manager.loadAttendanceRecords();
+                    }
                     break;
                 case 'billing':
                     await manager.loadBills();
@@ -577,11 +628,8 @@ async initializeAuth() {
                 case 'settings':
                     try {
                         console.log('⚙️ Loading settings section...');
-
-                        // Always load basic settings first
                         await this.loadSettings();
 
-                        // Try to use SettingsManager if available
                         if (this.managers.settings) {
                             if (typeof this.managers.settings.loadSettings === 'function') {
                                 await this.managers.settings.loadSettings();
@@ -590,7 +638,6 @@ async initializeAuth() {
                                 this.managers.settings.setupSettingsForms();
                             }
                         }
-
                         console.log('✅ Settings section loaded successfully');
                     } catch (error) {
                         console.error('Error in settings section:', error);
@@ -748,7 +795,13 @@ async initializeAuth() {
         console.log('🎯 Finalizing initialization...');
         this.setupErrorHandling();
         this.setupCleanup();
+        const currentUser = this.auth.getCurrentUser();
+        if (currentUser) {
+            this.updateSidebarVisibility(currentUser.role);
+        }
 
+        this.setupErrorHandling();
+        this.setupCleanup();
         // Initialize from saved state
         if (this.ui && typeof this.ui.initializeFromSavedState === 'function') {
             this.ui.initializeFromSavedState();
@@ -1121,7 +1174,32 @@ if (document.readyState === 'loading') {
 } else {
     initializeApp();
 }
+// app.js - Updated initialization
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Starting Business Dashboard Application...');
+    
+    try {
+        // Initialize the fixed UI Manager
+        const uiManager = new UIManager({
+            themeManager: window.themeManager,
+            langManager: window.langManager,
+            auth: window.auth
+        });
 
+        // Initialize UI
+        await uiManager.initialize();
+        
+        // Store globally for access from other modules
+        window.uiManager = uiManager;
+        
+        console.log('🎉 Application started successfully!');
+        
+    } catch (error) {
+        console.error('💥 Application failed to start:', error);
+        // Show error to user
+        alert('Application failed to load. Please refresh the page.');
+    }
+});
 // Export for module systems if needed
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { BusinessDashboard, UpdateManager };
