@@ -462,10 +462,13 @@ class BusinessDashboard {
             // ✅ FIXED: Update sidebar visibility for current user role
             this.updateSidebarVisibility(currentUser.role);
 
-            // Check permissions
-            if (this.auth.canAccessSection && !this.auth.canAccessSection(sectionId)) {
-                this.ui.showToast('You do not have permission to access this section', 'error');
-                return;
+            // ✅ REPLACE WITH:
+            // Check permissions only if method exists, otherwise allow access
+            if (this.auth.canAccessSection) {
+                if (!this.auth.canAccessSection(sectionId)) {
+                    this.ui.showToast('You do not have permission to access this section', 'error');
+                    return;
+                }
             }
 
             // ✅ **FIXED: PROPER SECTION HANDLERS WITH DATA LOADING**

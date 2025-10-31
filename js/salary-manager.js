@@ -13,18 +13,47 @@ class SalaryManager {
         this.attendanceRecords = [];
         this.salaryPayments = [];
         this.currentDate = new Date().toISOString().split('T')[0];
-        this.currentDateFilter = 'all';
+        this.currentDateFilter = 'today'; // Default to today
+
+        // Enhanced data structures
+        this.todaysAttendance = [];
+        this.pendingAdvances = [];
+        this.employeeSummary = {};
 
         this.setupEventListeners();
+        console.log('✅ SalaryManager initialized with enhanced UX');
     }
 
     async initialize() {
-        await this.loadDailyEmployees();
-        await this.loadAttendanceRecords();
-        await this.loadSalaryPayments();
+        try {
+            console.log('💰 Initializing enhanced Salary Manager...');
+
+            await this.loadDailyEmployees();
+            await this.loadAttendanceRecords();
+            await this.loadSalaryPayments();
+            await this.loadSalaryData();
+
+            this.setupEnhancedUI();
+            console.log('✅ Enhanced Salary Manager initialized');
+        } catch (error) {
+            console.error('❌ Salary Manager initialization failed:', error);
+        }
         return Promise.resolve();
     }
 
+    /**
+     * ENHANCED: Setup modern UI components
+     */
+    setupEnhancedUI() {
+        this.setupQuickActions();
+        this.setupDateFilters();
+        this.setupEmployeeGrid();
+        this.setupRealTimeUpdates();
+    }
+
+    /**
+     * ENHANCED: Load all salary data with optimizations
+     */
     async loadSalaryData() {
         try {
             if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
@@ -32,23 +61,28 @@ class SalaryManager {
                 return;
             }
 
-            console.log('💰 Loading salary data...');
-            this.ui.showSectionLoading('salaryContent', 'Loading salary data...');
+            console.log('💰 Loading enhanced salary data...');
+            this.ui.showSectionLoading('salaryContent', 'Loading salary dashboard...');
 
-            // Load all necessary data
-            await this.loadDailyEmployees();
-            await this.loadAttendanceRecords();
+            // Parallel loading for better performance
+            await Promise.all([
+                this.loadDailyEmployees(),
+                this.loadAttendanceRecords(),
+                this.loadSalaryPayments(),
+                this.loadSalaryRecords(),
+                this.loadAdvanceRecords()
+            ]);
 
-            this.salaryRecords = await this.db.getSalaryRecords() || [];
-            this.advanceRecords = await this.db.getAdvanceRecords() || [];
-            this.salaryPayments = await this.db.getSalaryPayments() || [];
-            this.attendanceRecords = await this.db.getAttendanceRecords() || [];
+            // Process enhanced data
+            this.processTodaysData();
+            this.calculateEmployeeSummaries();
 
-            this.renderSalaryTable();
+            // Render all enhanced components
+            this.renderEnhancedDashboard();
             this.setupSalaryForm();
             this.updateSummaryCards();
 
-            this.ui.showToast('Salary data loaded successfully', 'success');
+            this.ui.showToast('Salary dashboard loaded successfully', 'success');
         } catch (error) {
             console.error('Error loading salary data:', error);
             this.ui.showToast('Error loading salary data', 'error');
@@ -56,6 +90,874 @@ class SalaryManager {
             this.ui.hideSectionLoading('salaryContent');
         }
     }
+
+    /**
+     * ENHANCED: Process today's data for quick access
+     */
+    processTodaysData() {
+        const today = this.currentDate;
+
+        // Today's attendance
+        this.todaysAttendance = this.attendanceRecords.filter(record =>
+            record.attendance_date === today
+        );
+
+        // Pending advances
+        this.pendingAdvances = this.advanceRecords.filter(advance =>
+            advance.status === 'pending'
+        );
+
+        console.log(`📊 Today's data - Attendance: ${this.todaysAttendance.length}, Pending Advances: ${this.pendingAdvances.length}`);
+    }
+
+    /**
+     * ENHANCED: Calculate employee summaries
+     */
+    calculateEmployeeSummaries() {
+        this.employeeSummary = {};
+
+        this.dailyEmployees.forEach(employee => {
+            const employeeAttendance = this.attendanceRecords.filter(record =>
+                record.employee_id === employee.id
+            );
+
+            const employeeSalary = this.salaryRecords.filter(record =>
+                record.employee_id === employee.id
+            );
+
+            const employeeAdvances = this.advanceRecords.filter(record =>
+                record.employee_id === employee.id && record.status === 'pending'
+            );
+
+            const todayAttendance = this.todaysAttendance.find(record =>
+                record.employee_id === employee.id
+            );
+
+            this.employeeSummary[employee.id] = {
+                employee: employee,
+                totalSalary: employeeSalary.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0),
+                pendingAdvances: employeeAdvances.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0),
+                todayStatus: todayAttendance ? todayAttendance.status : 'not_marked',
+                workHours: todayAttendance ? (todayAttendance.work_hours || 0) : 0,
+                totalWorkDays: employeeAttendance.filter(a => a.status === 'present').length,
+                lastSalaryDate: employeeSalary.length > 0 ?
+                    Math.max(...employeeSalary.map(s => new Date(s.record_date))) : null
+            };
+        });
+    }
+
+    /**
+     * ENHANCED: Render modern dashboard
+     */
+    renderEnhancedDashboard() {
+        this.renderQuickActions();
+        this.renderEmployeeGrid();
+        this.renderSalaryTable();
+        this.renderPendingAdvances();
+    }
+
+    /**
+     * ENHANCED: Quick Actions Panel
+     */
+    renderQuickActions() {
+        const quickActionsContainer = document.getElementById('quickActions');
+        if (!quickActionsContainer) return;
+
+        const todaySummary = this.getTodaysAttendanceSummary();
+
+        quickActionsContainer.innerHTML = `
+            <div class="quick-actions-panel">
+                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                
+                <div class="action-buttons-grid">
+                    <button class="action-btn primary" onclick="app.getManagers().salary.showQuickAttendanceModal()">
+                        <i class="fas fa-user-check"></i>
+                        <span>Mark Attendance</span>
+                        <small>${todaySummary.present}/${todaySummary.total} present</small>
+                    </button>
+                    
+                    <button class="action-btn success" onclick="app.getManagers().salary.showBulkSalaryModal()">
+                        <i class="fas fa-money-bill-wave"></i>
+                        <span>Pay Today's Salary</span>
+                        <small>${todaySummary.present} employees</small>
+                    </button>
+                    
+                    <button class="action-btn warning" onclick="app.getManagers().salary.showAdvanceModal()">
+                        <i class="fas fa-hand-holding-usd"></i>
+                        <span>Add Advance</span>
+                        <small>${this.pendingAdvances.length} pending</small>
+                    </button>
+                    
+                    <button class="action-btn info" onclick="app.getManagers().salary.showProcessSalaryModal()">
+                        <i class="fas fa-money-check"></i>
+                        <span>Process Salary</span>
+                        <small>Complete payments</small>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * ENHANCED: Employee Grid View
+     */
+    renderEmployeeGrid() {
+        const employeeGrid = document.getElementById('employeeGrid');
+        if (!employeeGrid) return;
+
+        if (this.dailyEmployees.length === 0) {
+            employeeGrid.innerHTML = `
+                <div class="no-data-grid">
+                    <i class="fas fa-user-tie"></i>
+                    <h3>No Daily Employees</h3>
+                    <p>Add employees with daily salary type to see them here</p>
+                </div>
+            `;
+            return;
+        }
+
+        employeeGrid.innerHTML = this.dailyEmployees.map(employee => {
+            const summary = this.employeeSummary[employee.id] || {};
+            const statusClass = this.getStatusClass(summary.todayStatus);
+
+            return `
+                <div class="employee-card ${statusClass}" data-employee-id="${employee.id}">
+                    <div class="employee-card-header">
+                        <div class="employee-avatar">
+                            <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(employee.name)}&background=ff6b35&color=fff" 
+                                 alt="${employee.name}">
+                        </div>
+                        <div class="employee-info">
+                            <h4>${employee.name}</h4>
+                            <p>${employee.role} • ${employee.id}</p>
+                        </div>
+                        <div class="employee-status ${statusClass}">
+                            <i class="fas ${this.getStatusIcon(summary.todayStatus)}"></i>
+                            <span>${this.getStatusText(summary.todayStatus)}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="employee-card-body">
+                        <div class="employee-stats">
+                            <div class="stat">
+                                <label>Today's Hours</label>
+                                <span class="value">${summary.workHours}h</span>
+                            </div>
+                            <div class="stat">
+                                <label>Pending Advances</label>
+                                <span class="value ${summary.pendingAdvances > 0 ? 'warning' : ''}">
+                                    ${Utils.formatCurrency(summary.pendingAdvances)}
+                                </span>
+                            </div>
+                            <div class="stat">
+                                <label>Work Days</label>
+                                <span class="value">${summary.totalWorkDays}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="employee-card-actions">
+                        <button class="btn-icon small" onclick="app.getManagers().salary.markEmployeeAttendance('${employee.id}')" 
+                                title="Mark Attendance">
+                            <i class="fas fa-calendar-check"></i>
+                        </button>
+                        <button class="btn-icon small" onclick="app.getManagers().salary.payEmployeeSalary('${employee.id}')"
+                                title="Pay Salary">
+                            <i class="fas fa-money-bill-wave"></i>
+                        </button>
+                        <button class="btn-icon small" onclick="app.getManagers().salary.addEmployeeAdvance('${employee.id}')"
+                                title="Add Advance">
+                            <i class="fas fa-hand-holding-usd"></i>
+                        </button>
+                        <button class="btn-icon small" onclick="app.getManagers().salary.viewEmployeeDetails('${employee.id}')"
+                                title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    /**
+     * ENHANCED: Status helpers
+     */
+    getStatusClass(status) {
+        const classes = {
+            'present': 'status-present',
+            'absent': 'status-absent',
+            'half_day': 'status-half-day',
+            'not_marked': 'status-pending'
+        };
+        return classes[status] || 'status-pending';
+    }
+
+    getStatusIcon(status) {
+        const icons = {
+            'present': 'fa-check-circle',
+            'absent': 'fa-times-circle',
+            'half_day': 'fa-clock',
+            'not_marked': 'fa-question-circle'
+        };
+        return icons[status] || 'fa-question-circle';
+    }
+
+    getStatusText(status) {
+        const texts = {
+            'present': 'Present',
+            'absent': 'Absent',
+            'half_day': 'Half Day',
+            'not_marked': 'Not Marked'
+        };
+        return texts[status] || 'Not Marked';
+    }
+
+    /**
+     * ENHANCED: Quick Attendance Modal
+     */
+    showQuickAttendanceModal() {
+        const todaySummary = this.getTodaysAttendanceSummary();
+
+        const modalHtml = `
+            <div id="quickAttendanceModal" class="modal large">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-user-check"></i> Quick Attendance - Today</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="attendance-summary-bar">
+                        <div class="summary-item">
+                            <span class="count present">${todaySummary.present}</span>
+                            <span class="label">Present</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="count absent">${todaySummary.absent}</span>
+                            <span class="label">Absent</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="count half-day">${todaySummary.halfDay}</span>
+                            <span class="label">Half Day</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="count total">${todaySummary.total}</span>
+                            <span class="label">Total</span>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-attendance-grid">
+                        ${this.dailyEmployees.map(employee => {
+            const summary = this.employeeSummary[employee.id] || {};
+            const isPresent = summary.todayStatus === 'present';
+            const isAbsent = summary.todayStatus === 'absent';
+            const isHalfDay = summary.todayStatus === 'half_day';
+
+            return `
+                                <div class="attendance-item" data-employee-id="${employee.id}">
+                                    <div class="employee-info">
+                                        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(employee.name)}&background=ff6b35&color=fff" 
+                                             alt="${employee.name}" class="avatar-small">
+                                        <div class="info">
+                                            <strong>${employee.name}</strong>
+                                            <small>${employee.role}</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="attendance-actions">
+                                        <button class="attendance-btn present ${isPresent ? 'active' : ''}" 
+                                                onclick="app.getManagers().salary.quickMarkAttendance('${employee.id}', 'present')">
+                                            <i class="fas fa-check"></i>
+                                            <span>Present</span>
+                                        </button>
+                                        <button class="attendance-btn absent ${isAbsent ? 'active' : ''}"
+                                                onclick="app.getManagers().salary.quickMarkAttendance('${employee.id}', 'absent')">
+                                            <i class="fas fa-times"></i>
+                                            <span>Absent</span>
+                                        </button>
+                                        <button class="attendance-btn half-day ${isHalfDay ? 'active' : ''}"
+                                                onclick="app.getManagers().salary.quickMarkAttendance('${employee.id}', 'half_day')">
+                                            <i class="fas fa-clock"></i>
+                                            <span>Half Day</span>
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="attendance-time ${isPresent ? 'visible' : ''}">
+                                        <input type="time" id="checkIn_${employee.id}" placeholder="Check In" 
+                                               value="${this.getDefaultCheckInTime()}">
+                                        <input type="time" id="checkOut_${employee.id}" placeholder="Check Out">
+                                    </div>
+                                </div>
+                            `;
+        }).join('')}
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="app.getManagers().salary.markAllPresent()">
+                            <i class="fas fa-users"></i> Mark All Present
+                        </button>
+                        <button type="button" class="btn-primary" onclick="app.getManagers().salary.saveQuickAttendance()">
+                            <i class="fas fa-save"></i> Save All Attendance
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'quickAttendanceModal');
+    }
+
+    /**
+     * ENHANCED: Quick mark attendance
+     */
+    async quickMarkAttendance(employeeId, status) {
+        try {
+            const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+            if (!employee) return;
+
+            // Remove active class from all buttons for this employee
+            const item = document.querySelector(`[data-employee-id="${employeeId}"]`);
+            if (item) {
+                item.querySelectorAll('.attendance-btn').forEach(btn => btn.classList.remove('active'));
+                item.querySelector(`.attendance-btn.${status}`).classList.add('active');
+
+                // Show time inputs for present status
+                const timeInputs = item.querySelector('.attendance-time');
+                if (timeInputs) {
+                    timeInputs.classList.toggle('visible', status === 'present');
+                }
+            }
+
+            this.ui.showToast(`Marked ${employee.name} as ${status}`, 'success');
+        } catch (error) {
+            console.error('Quick mark attendance error:', error);
+        }
+    }
+
+    /**
+     * ENHANCED: Save all quick attendance
+     */
+    async saveQuickAttendance() {
+        try {
+            const attendanceItems = document.querySelectorAll('.attendance-item');
+            let savedCount = 0;
+
+            for (const item of attendanceItems) {
+                const employeeId = item.getAttribute('data-employee-id');
+                const activeButton = item.querySelector('.attendance-btn.active');
+
+                if (activeButton) {
+                    const status = activeButton.classList[1]; // present, absent, or half-day
+                    const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+
+                    if (employee) {
+                        const attendanceData = {
+                            employee_id: employeeId,
+                            employee_name: employee.name,
+                            attendance_date: this.currentDate,
+                            status: status,
+                            check_in_time: status === 'present' ?
+                                document.getElementById(`checkIn_${employeeId}`)?.value : null,
+                            check_out_time: status === 'present' ?
+                                document.getElementById(`checkOut_${employeeId}`)?.value : null,
+                            notes: 'Quick attendance'
+                        };
+
+                        await this.markAttendance(attendanceData);
+                        savedCount++;
+                    }
+                }
+            }
+
+            this.ui.showToast(`Saved attendance for ${savedCount} employees`, 'success');
+            this.ui.hideModal('quickAttendanceModal');
+            await this.loadSalaryData();
+        } catch (error) {
+            console.error('Save quick attendance error:', error);
+            this.ui.showToast('Error saving attendance', 'error');
+        }
+    }
+
+    /**
+     * ENHANCED: Mark all present
+     */
+    async markAllPresent() {
+        const attendanceItems = document.querySelectorAll('.attendance-item');
+        attendanceItems.forEach(item => {
+            const presentBtn = item.querySelector('.attendance-btn.present');
+            if (presentBtn) {
+                presentBtn.click();
+            }
+        });
+        this.ui.showToast('Marked all as present', 'info');
+    }
+
+    /**
+     * ENHANCED: Bulk Salary Payment Modal
+     */
+    showBulkSalaryModal() {
+        const presentEmployees = this.dailyEmployees.filter(employee => {
+            const summary = this.employeeSummary[employee.id];
+            return summary && summary.todayStatus === 'present';
+        });
+
+        const modalHtml = `
+            <div id="bulkSalaryModal" class="modal large">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-money-bill-wave"></i> Bulk Salary Payment - Today</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="bulk-summary">
+                        <div class="summary-card">
+                            <i class="fas fa-users"></i>
+                            <div>
+                                <span class="count">${presentEmployees.length}</span>
+                                <span class="label">Employees Present Today</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bulk-salary-grid">
+                        ${presentEmployees.map(employee => {
+            const summary = this.employeeSummary[employee.id] || {};
+            const defaultSalary = employee.daily_rate || employee.basic_salary || 500;
+
+            return `
+                                <div class="salary-item" data-employee-id="${employee.id}">
+                                    <div class="employee-info">
+                                        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(employee.name)}&background=ff6b35&color=fff" 
+                                             alt="${employee.name}" class="avatar-small">
+                                        <div class="info">
+                                            <strong>${employee.name}</strong>
+                                            <small>${employee.role} • ${Utils.formatCurrency(summary.pendingAdvances)} pending</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="salary-inputs">
+                                        <div class="input-group">
+                                            <label>Salary Amount</label>
+                                            <input type="number" 
+                                                   id="salary_${employee.id}" 
+                                                   value="${defaultSalary}"
+                                                   min="0" 
+                                                   step="50">
+                                        </div>
+                                        
+                                        <div class="advance-deduction">
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" 
+                                                       id="deductAdvance_${employee.id}"
+                                                       ${summary.pendingAdvances > 0 ? 'checked' : ''}>
+                                                <span>Deduct Advance (${Utils.formatCurrency(summary.pendingAdvances)})</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="net-salary">
+                                        <strong id="netSalary_${employee.id}">
+                                            ${Utils.formatCurrency(defaultSalary - (summary.pendingAdvances > 0 ? summary.pendingAdvances : 0))}
+                                        </strong>
+                                    </div>
+                                </div>
+                            `;
+        }).join('')}
+                    </div>
+                    
+                    <div class="bulk-total">
+                        <div class="total-row">
+                            <span>Total Salary:</span>
+                            <span id="bulkTotalSalary">${Utils.formatCurrency(presentEmployees.reduce((sum, emp) => sum + (emp.daily_rate || emp.basic_salary || 500), 0))}</span>
+                        </div>
+                        <div class="total-row">
+                            <span>Total Advances Deducted:</span>
+                            <span id="bulkTotalAdvances">${Utils.formatCurrency(presentEmployees.reduce((sum, emp) => {
+            const summary = this.employeeSummary[emp.id] || {};
+            return sum + (summary.pendingAdvances > 0 ? summary.pendingAdvances : 0);
+        }, 0))}</span>
+                        </div>
+                        <div class="total-row final">
+                            <span>Net Payment:</span>
+                            <span id="bulkNetPayment">${Utils.formatCurrency(presentEmployees.reduce((sum, emp) => {
+            const summary = this.employeeSummary[emp.id] || {};
+            const salary = emp.daily_rate || emp.basic_salary || 500;
+            const advance = summary.pendingAdvances > 0 ? summary.pendingAdvances : 0;
+            return sum + (salary - advance);
+        }, 0))}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" onclick="app.getManagers().salary.calculateBulkSalaries()">
+                            <i class="fas fa-calculator"></i> Recalculate
+                        </button>
+                        <button type="button" class="btn-primary" onclick="app.getManagers().salary.processBulkSalary()">
+                            <i class="fas fa-paper-plane"></i> Process Payments
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'bulkSalaryModal');
+        this.setupBulkSalaryCalculations();
+    }
+
+    /**
+     * ENHANCED: Setup bulk salary calculations
+     */
+    setupBulkSalaryCalculations() {
+        // Add event listeners for real-time calculation
+        document.querySelectorAll('.bulk-salary-grid input').forEach(input => {
+            input.addEventListener('input', () => this.calculateBulkSalaries());
+        });
+
+        document.querySelectorAll('.bulk-salary-grid input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', () => this.calculateBulkSalaries());
+        });
+    }
+
+    /**
+     * ENHANCED: Calculate bulk salaries in real-time
+     */
+    calculateBulkSalaries() {
+        let totalSalary = 0;
+        let totalAdvances = 0;
+        let netPayment = 0;
+
+        document.querySelectorAll('.salary-item').forEach(item => {
+            const employeeId = item.getAttribute('data-employee-id');
+            const salaryInput = document.getElementById(`salary_${employeeId}`);
+            const advanceCheckbox = document.getElementById(`deductAdvance_${employeeId}`);
+            const netSalaryElement = document.getElementById(`netSalary_${employeeId}`);
+
+            const salary = parseFloat(salaryInput?.value) || 0;
+            const summary = this.employeeSummary[employeeId] || {};
+            const advanceDeduction = advanceCheckbox?.checked ? summary.pendingAdvances : 0;
+            const netSalary = salary - advanceDeduction;
+
+            if (netSalaryElement) {
+                netSalaryElement.textContent = Utils.formatCurrency(netSalary);
+            }
+
+            totalSalary += salary;
+            totalAdvances += advanceDeduction;
+            netPayment += netSalary;
+        });
+
+        // Update totals
+        document.getElementById('bulkTotalSalary').textContent = Utils.formatCurrency(totalSalary);
+        document.getElementById('bulkTotalAdvances').textContent = Utils.formatCurrency(totalAdvances);
+        document.getElementById('bulkNetPayment').textContent = Utils.formatCurrency(netPayment);
+    }
+
+    /**
+     * ENHANCED: Process bulk salary payments
+     */
+    async processBulkSalary() {
+        try {
+            const salaryItems = document.querySelectorAll('.salary-item');
+            let processedCount = 0;
+
+            this.ui.showExportProgress('Processing bulk salary payments...');
+
+            for (const item of salaryItems) {
+                const employeeId = item.getAttribute('data-employee-id');
+                const salaryInput = document.getElementById(`salary_${employeeId}`);
+                const advanceCheckbox = document.getElementById(`deductAdvance_${employeeId}`);
+
+                const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+                if (!employee) continue;
+
+                const salary = parseFloat(salaryInput?.value) || 0;
+                const deductAdvance = advanceCheckbox?.checked;
+                const summary = this.employeeSummary[employeeId] || {};
+
+                if (salary > 0) {
+                    // Save salary record
+                    const salaryData = {
+                        employee_id: employeeId,
+                        employee_name: employee.name,
+                        amount: salary,
+                        record_date: this.currentDate,
+                        type: 'salary',
+                        week_number: this.getWeekNumber(new Date()),
+                        month_number: new Date().getMonth() + 1,
+                        year: new Date().getFullYear(),
+                        created_at: new Date().toISOString()
+                    };
+                    await this.db.create('salary_records', salaryData);
+
+                    // Deduct advances if requested
+                    if (deductAdvance && summary.pendingAdvances > 0) {
+                        const advanceData = {
+                            employee_id: employeeId,
+                            employee_name: employee.name,
+                            amount: -summary.pendingAdvances, // Negative amount for deduction
+                            record_date: this.currentDate,
+                            type: 'advance_deduction',
+                            status: 'deducted',
+                            week_number: this.getWeekNumber(new Date()),
+                            month_number: new Date().getMonth() + 1,
+                            year: new Date().getFullYear(),
+                            created_at: new Date().toISOString()
+                        };
+                        await this.db.create('advance_records', advanceData);
+                    }
+
+                    processedCount++;
+                }
+            }
+
+            this.ui.showToast(`Processed salary for ${processedCount} employees`, 'success');
+            this.ui.hideModal('bulkSalaryModal');
+            await this.loadSalaryData();
+        } catch (error) {
+            console.error('Bulk salary processing error:', error);
+            this.ui.showToast('Error processing bulk salary', 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
+
+    /**
+     * ENHANCED: Individual employee actions
+     */
+    async markEmployeeAttendance(employeeId) {
+        const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+        if (!employee) return;
+
+        const modalHtml = `
+            <div id="employeeAttendanceModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-calendar-check"></i> Mark Attendance - ${employee.name}</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <form id="employeeAttendanceForm" class="modal-form">
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="attendanceDate" value="${this.currentDate}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="attendanceStatus" required>
+                                <option value="present">Present</option>
+                                <option value="absent">Absent</option>
+                                <option value="half_day">Half Day</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Check In Time</label>
+                                <input type="time" id="checkInTime" value="${this.getDefaultCheckInTime()}">
+                            </div>
+                            <div class="form-group">
+                                <label>Check Out Time</label>
+                                <input type="time" id="checkOutTime">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <textarea id="attendanceNotes" placeholder="Add any notes"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                            <button type="submit" class="btn-primary">Save Attendance</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'employeeAttendanceModal');
+
+        document.getElementById('employeeAttendanceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = {
+                employee_id: employeeId,
+                employee_name: employee.name,
+                attendance_date: document.getElementById('attendanceDate').value,
+                status: document.getElementById('attendanceStatus').value,
+                check_in_time: document.getElementById('checkInTime').value,
+                check_out_time: document.getElementById('checkOutTime').value,
+                notes: document.getElementById('attendanceNotes').value
+            };
+
+            await this.markAttendance(formData);
+            this.ui.hideModal('employeeAttendanceModal');
+        });
+    }
+
+    async payEmployeeSalary(employeeId) {
+        const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+        if (!employee) return;
+
+        const summary = this.employeeSummary[employeeId] || {};
+        const defaultSalary = employee.daily_rate || employee.basic_salary || 500;
+
+        const modalHtml = `
+            <div id="employeeSalaryModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-money-bill-wave"></i> Pay Salary - ${employee.name}</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <form id="employeeSalaryForm" class="modal-form">
+                        <div class="form-group">
+                            <label>Salary Amount</label>
+                            <input type="number" id="salaryAmount" value="${defaultSalary}" required min="0" step="50">
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="salaryDate" value="${this.currentDate}" required>
+                        </div>
+                        ${summary.pendingAdvances > 0 ? `
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="deductAdvance" checked>
+                                <span>Deduct Pending Advance (${Utils.formatCurrency(summary.pendingAdvances)})</span>
+                            </label>
+                        </div>
+                        ` : ''}
+                        <div class="salary-preview">
+                            <div class="preview-item">
+                                <span>Salary:</span>
+                                <span id="previewSalary">${Utils.formatCurrency(defaultSalary)}</span>
+                            </div>
+                            ${summary.pendingAdvances > 0 ? `
+                            <div class="preview-item">
+                                <span>Advance Deduction:</span>
+                                <span id="previewDeduction">-${Utils.formatCurrency(summary.pendingAdvances)}</span>
+                            </div>
+                            ` : ''}
+                            <div class="preview-item total">
+                                <span>Net Amount:</span>
+                                <span id="previewNetAmount">${Utils.formatCurrency(defaultSalary - (summary.pendingAdvances > 0 ? summary.pendingAdvances : 0))}</span>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                            <button type="submit" class="btn-primary">Pay Salary</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'employeeSalaryModal');
+
+        // Real-time calculation
+        document.getElementById('salaryAmount').addEventListener('input', (e) => {
+            this.updateSalaryPreview(employeeId, parseFloat(e.target.value) || 0);
+        });
+
+        document.getElementById('deductAdvance')?.addEventListener('change', (e) => {
+            this.updateSalaryPreview(employeeId, parseFloat(document.getElementById('salaryAmount').value) || 0);
+        });
+
+        document.getElementById('employeeSalaryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const salary = parseFloat(document.getElementById('salaryAmount').value) || 0;
+            const date = document.getElementById('salaryDate').value;
+            const deductAdvance = document.getElementById('deductAdvance')?.checked || false;
+
+            if (salary > 0) {
+                await this.saveEmployeeSalary(employeeId, salary, date, deductAdvance);
+                this.ui.hideModal('employeeSalaryModal');
+            }
+        });
+    }
+
+    updateSalaryPreview(employeeId, salary) {
+        const summary = this.employeeSummary[employeeId] || {};
+        const deductAdvance = document.getElementById('deductAdvance')?.checked || false;
+        const advanceDeduction = deductAdvance ? summary.pendingAdvances : 0;
+        const netAmount = salary - advanceDeduction;
+
+        document.getElementById('previewSalary').textContent = Utils.formatCurrency(salary);
+        if (document.getElementById('previewDeduction')) {
+            document.getElementById('previewDeduction').textContent = `-${Utils.formatCurrency(advanceDeduction)}`;
+        }
+        document.getElementById('previewNetAmount').textContent = Utils.formatCurrency(netAmount);
+    }
+
+    async saveEmployeeSalary(employeeId, salary, date, deductAdvance) {
+        try {
+            const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
+            if (!employee) return;
+
+            // Save salary record
+            const salaryData = {
+                employee_id: employeeId,
+                employee_name: employee.name,
+                amount: salary,
+                record_date: date,
+                type: 'salary',
+                week_number: this.getWeekNumber(new Date(date)),
+                month_number: new Date(date).getMonth() + 1,
+                year: new Date(date).getFullYear(),
+                created_at: new Date().toISOString()
+            };
+            await this.db.create('salary_records', salaryData);
+
+            // Deduct advance if requested
+            if (deductAdvance) {
+                const summary = this.employeeSummary[employeeId] || {};
+                if (summary.pendingAdvances > 0) {
+                    const advanceData = {
+                        employee_id: employeeId,
+                        employee_name: employee.name,
+                        amount: -summary.pendingAdvances,
+                        record_date: date,
+                        type: 'advance_deduction',
+                        status: 'deducted',
+                        week_number: this.getWeekNumber(new Date(date)),
+                        month_number: new Date(date).getMonth() + 1,
+                        year: new Date(date).getFullYear(),
+                        created_at: new Date().toISOString()
+                    };
+                    await this.db.create('advance_records', advanceData);
+                }
+            }
+
+            this.ui.showToast(`Salary paid to ${employee.name}`, 'success');
+            await this.loadSalaryData();
+        } catch (error) {
+            console.error('Save employee salary error:', error);
+            this.ui.showToast('Error paying salary', 'error');
+        }
+    }
+
+    /**
+     * ENHANCED: Utility methods
+     */
+    getDefaultCheckInTime() {
+        return '09:00';
+    }
+
+    getTodaysAttendanceSummary() {
+        const today = this.currentDate;
+        const todaysRecords = this.attendanceRecords.filter(record =>
+            record.attendance_date === today
+        );
+
+        return {
+            present: todaysRecords.filter(r => r.status === 'present').length,
+            absent: todaysRecords.filter(r => r.status === 'absent').length,
+            halfDay: todaysRecords.filter(r => r.status === 'half_day').length,
+            total: this.dailyEmployees.length
+        };
+    }
+
+    // ==================== KEEP EXISTING METHODS ====================
+    // [Keep all your existing methods like loadDailyEmployees, loadAttendanceRecords, 
+    // loadSalaryPayments, markAttendance, processSalaryPayment, etc.]
+    // They should work with the enhanced UX
+
+
 
     async loadDailyEmployees() {
         try {
@@ -87,9 +989,47 @@ class SalaryManager {
         }
     }
 
-    /**
-         * Initialize salary payments section - CRITICAL MISSING METHOD
-         */
+    async loadSalaryRecords() {
+        try {
+            this.salaryRecords = await this.db.getSalaryRecords() || [];
+        } catch (error) {
+            console.error('Error loading salary records:', error);
+            this.salaryRecords = [];
+        }
+    }
+
+    async loadAdvanceRecords() {
+        try {
+            this.advanceRecords = await this.db.getAdvanceRecords() || [];
+        } catch (error) {
+            console.error('Error loading advance records:', error);
+            this.advanceRecords = [];
+        }
+    }
+
+    // ... [Keep all your other existing methods]
+    // ==================== CORE DATA LOADING METHODS ====================
+
+    async loadSalaryRecords() {
+        try {
+            this.salaryRecords = await this.db.getSalaryRecords() || [];
+        } catch (error) {
+            console.error('Error loading salary records:', error);
+            this.salaryRecords = [];
+        }
+    }
+
+    async loadAdvanceRecords() {
+        try {
+            this.advanceRecords = await this.db.getAdvanceRecords() || [];
+        } catch (error) {
+            console.error('Error loading advance records:', error);
+            this.advanceRecords = [];
+        }
+    }
+
+    // ==================== SALARY PAYMENTS SYSTEM ====================
+
     async initializeSalaryPayments() {
         try {
             console.log('💰 Initializing salary payments section...');
@@ -105,9 +1045,6 @@ class SalaryManager {
         }
     }
 
-    /**
-     * Load and render salary payments table - CRITICAL MISSING METHOD
-     */
     async loadSalaryPaymentsTable() {
         try {
             const tbody = document.getElementById('salaryPaymentsTableBody');
@@ -118,14 +1055,14 @@ class SalaryManager {
 
             if (this.salaryPayments.length === 0) {
                 tbody.innerHTML = `
-                    <tr>
-                        <td colspan="11" class="no-data">
-                            <i class="fas fa-money-check"></i>
-                            <br>No salary payments recorded
-                            <br><small>Process salary payments to see records here</small>
-                        </td>
-                    </tr>
-                `;
+                <tr>
+                    <td colspan="11" class="no-data">
+                        <i class="fas fa-money-check"></i>
+                        <br>No salary payments recorded
+                        <br><small>Process salary payments to see records here</small>
+                    </td>
+                </tr>
+            `;
                 return;
             }
 
@@ -134,55 +1071,54 @@ class SalaryManager {
                 const payslipBtn = payment.payslip_generated ?
                     '<span class="badge success"><i class="fas fa-check"></i> Generated</span>' :
                     `<button class="btn-primary btn-sm generate-payslip-btn" 
-                            data-payment-id="${payment.id}"
-                            title="Generate Payslip">
-                        <i class="fas fa-file-pdf"></i>
-                    </button>`;
+                        data-payment-id="${payment.id}"
+                        title="Generate Payslip">
+                    <i class="fas fa-file-pdf"></i>
+                </button>`;
 
                 return `
-                    <tr class="salary-payment-record">
-                        <td><strong>${payment.id}</strong></td>
-                        <td>${Utils.formatDate(payment.payment_date)}</td>
-                        <td>
-                            <div class="employee-info">
-                                <strong>${payment.employee_name}</strong>
-                                <small>${payment.employee_id}</small>
-                            </div>
-                        </td>
-                        <td>
-                            ${Utils.formatDate(payment.pay_period_start)} 
-                            <br>to<br>
-                            ${Utils.formatDate(payment.pay_period_end)}
-                        </td>
-                        <td>${Utils.formatCurrency(payment.basic_salary)}</td>
-                        <td>${Utils.formatCurrency(payment.overtime_amount)}</td>
-                        <td class="text-danger">-${Utils.formatCurrency(payment.advance_deductions)}</td>
-                        <td class="text-success"><strong>${Utils.formatCurrency(payment.net_salary)}</strong></td>
-                        <td>
-                            <span class="payment-method ${payment.payment_method}">
-                                ${payment.payment_method}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="status-badge ${statusClass}">
-                                ${payment.status}
-                            </span>
-                        </td>
-                        <td>
-                            <div class="action-buttons">
-                                ${payslipBtn}
-                                <button class="btn-secondary btn-sm" 
-                                        onclick="app.getManagers().salary.viewPaymentDetails('${payment.id}')"
-                                        title="View Details">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
+                <tr class="salary-payment-record">
+                    <td><strong>${payment.id}</strong></td>
+                    <td>${Utils.formatDate(payment.payment_date)}</td>
+                    <td>
+                        <div class="employee-info">
+                            <strong>${payment.employee_name}</strong>
+                            <small>${payment.employee_id}</small>
+                        </div>
+                    </td>
+                    <td>
+                        ${Utils.formatDate(payment.pay_period_start)} 
+                        <br>to<br>
+                        ${Utils.formatDate(payment.pay_period_end)}
+                    </td>
+                    <td>${Utils.formatCurrency(payment.basic_salary)}</td>
+                    <td>${Utils.formatCurrency(payment.overtime_amount)}</td>
+                    <td class="text-danger">-${Utils.formatCurrency(payment.advance_deductions)}</td>
+                    <td class="text-success"><strong>${Utils.formatCurrency(payment.net_salary)}</strong></td>
+                    <td>
+                        <span class="payment-method ${payment.payment_method}">
+                            ${payment.payment_method}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status-badge ${statusClass}">
+                            ${payment.status}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            ${payslipBtn}
+                            <button class="btn-secondary btn-sm" 
+                                    onclick="app.getManagers().salary.viewPaymentDetails('${payment.id}')"
+                                    title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
             }).join('');
 
-            // Update summary cards
             this.updateSalaryPaymentsSummary();
 
         } catch (error) {
@@ -191,13 +1127,9 @@ class SalaryManager {
         }
     }
 
-    /**
-     * Setup event listeners for salary payments - CRITICAL MISSING METHOD
-     */
     setupSalaryPaymentsEventListeners() {
         console.log('🔧 Setting up salary payments event listeners...');
 
-        // Process salary payment button
         document.addEventListener('click', (e) => {
             if (e.target.id === 'processSalaryBtn' || e.target.closest('#processSalaryBtn')) {
                 this.showProcessSalaryModal();
@@ -209,7 +1141,6 @@ class SalaryManager {
                 return;
             }
 
-            // Generate payslip buttons
             if (e.target.classList.contains('generate-payslip-btn') || e.target.closest('.generate-payslip-btn')) {
                 const button = e.target.classList.contains('generate-payslip-btn') ?
                     e.target : e.target.closest('.generate-payslip-btn');
@@ -222,16 +1153,12 @@ class SalaryManager {
         });
     }
 
-    /**
-     * Update salary payments summary cards - CRITICAL MISSING METHOD
-     */
     updateSalaryPaymentsSummary() {
         const processedCount = this.salaryPayments.length;
         const totalPaid = this.salaryPayments.reduce((sum, payment) =>
             sum + parseFloat(payment.net_salary || 0), 0);
         const payslipsGenerated = this.salaryPayments.filter(p => p.payslip_generated).length;
 
-        // Update DOM elements if they exist
         const processedEl = document.getElementById('processedPaymentsCount');
         const totalPaidEl = document.getElementById('totalSalaryPaid');
         const payslipsEl = document.getElementById('payslipsGenerated');
@@ -241,10 +1168,6 @@ class SalaryManager {
         if (payslipsEl) payslipsEl.textContent = payslipsGenerated;
     }
 
-
-    /**
-     * View payment details - CRITICAL MISSING METHOD
-     */
     async viewPaymentDetails(paymentId) {
         const payment = this.salaryPayments.find(p => p.id === paymentId);
         if (!payment) {
@@ -255,113 +1178,110 @@ class SalaryManager {
         const employee = this.dailyEmployees.find(emp => emp.id === payment.employee_id);
 
         const modalHtml = `
-            <div id="paymentDetailsModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-receipt"></i> Payment Details</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <div class="payment-details">
-                        <div class="detail-section">
-                            <h4>Employee Information</h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <label>Employee Name:</label>
-                                    <span>${employee?.name || payment.employee_name}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Employee ID:</label>
-                                    <span>${payment.employee_id}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Department:</label>
-                                    <span>${employee?.role || 'N/A'}</span>
-                                </div>
+        <div id="paymentDetailsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-receipt"></i> Payment Details</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="payment-details">
+                    <div class="detail-section">
+                        <h4>Employee Information</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Employee Name:</label>
+                                <span>${employee?.name || payment.employee_name}</span>
                             </div>
-                        </div>
-                        
-                        <div class="detail-section">
-                            <h4>Payment Information</h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <label>Payment ID:</label>
-                                    <span>${payment.id}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Payment Date:</label>
-                                    <span>${Utils.formatDate(payment.payment_date)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Payment Method:</label>
-                                    <span class="payment-method ${payment.payment_method}">${payment.payment_method}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Status:</label>
-                                    <span class="status-badge ${payment.status}">${payment.status}</span>
-                                </div>
+                            <div class="detail-item">
+                                <label>Employee ID:</label>
+                                <span>${payment.employee_id}</span>
                             </div>
-                        </div>
-                        
-                        <div class="detail-section">
-                            <h4>Salary Breakdown</h4>
-                            <div class="salary-breakdown">
-                                <div class="breakdown-item">
-                                    <span>Basic Salary:</span>
-                                    <span>${Utils.formatCurrency(payment.basic_salary)}</span>
-                                </div>
-                                <div class="breakdown-item">
-                                    <span>Overtime Amount:</span>
-                                    <span>${Utils.formatCurrency(payment.overtime_amount)}</span>
-                                </div>
-                                <div class="breakdown-item deduction">
-                                    <span>Advance Deductions:</span>
-                                    <span>-${Utils.formatCurrency(payment.advance_deductions)}</span>
-                                </div>
-                                <div class="breakdown-item total">
-                                    <span>Net Salary:</span>
-                                    <span><strong>${Utils.formatCurrency(payment.net_salary)}</strong></span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="detail-section">
-                            <h4>Pay Period</h4>
-                            <div class="detail-grid">
-                                <div class="detail-item">
-                                    <label>Period Start:</label>
-                                    <span>${Utils.formatDate(payment.pay_period_start)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Period End:</label>
-                                    <span>${Utils.formatDate(payment.pay_period_end)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Work Days:</label>
-                                    <span>${payment.work_days || 0}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Total Hours:</label>
-                                    <span>${payment.total_hours || 0}</span>
-                                </div>
+                            <div class="detail-item">
+                                <label>Department:</label>
+                                <span>${employee?.role || 'N/A'}</span>
                             </div>
                         </div>
                     </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn-secondary modal-cancel">Close</button>
-                        <button type="button" class="btn-primary" onclick="app.getManagers().salary.generatePayslip('${payment.id}')">
-                            <i class="fas fa-file-pdf"></i> Generate Payslip
-                        </button>
+                    
+                    <div class="detail-section">
+                        <h4>Payment Information</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Payment ID:</label>
+                                <span>${payment.id}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Payment Date:</label>
+                                <span>${Utils.formatDate(payment.payment_date)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Payment Method:</label>
+                                <span class="payment-method ${payment.payment_method}">${payment.payment_method}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Status:</label>
+                                <span class="status-badge ${payment.status}">${payment.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Salary Breakdown</h4>
+                        <div class="salary-breakdown">
+                            <div class="breakdown-item">
+                                <span>Basic Salary:</span>
+                                <span>${Utils.formatCurrency(payment.basic_salary)}</span>
+                            </div>
+                            <div class="breakdown-item">
+                                <span>Overtime Amount:</span>
+                                <span>${Utils.formatCurrency(payment.overtime_amount)}</span>
+                            </div>
+                            <div class="breakdown-item deduction">
+                                <span>Advance Deductions:</span>
+                                <span>-${Utils.formatCurrency(payment.advance_deductions)}</span>
+                            </div>
+                            <div class="breakdown-item total">
+                                <span>Net Salary:</span>
+                                <span><strong>${Utils.formatCurrency(payment.net_salary)}</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="detail-section">
+                        <h4>Pay Period</h4>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Period Start:</label>
+                                <span>${Utils.formatDate(payment.pay_period_start)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Period End:</label>
+                                <span>${Utils.formatDate(payment.pay_period_end)}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Work Days:</label>
+                                <span>${payment.work_days || 0}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Total Hours:</label>
+                                <span>${payment.total_hours || 0}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary modal-cancel">Close</button>
+                    <button type="button" class="btn-primary" onclick="app.getManagers().salary.generatePayslip('${payment.id}')">
+                        <i class="fas fa-file-pdf"></i> Generate Payslip
+                    </button>
+                </div>
             </div>
-        `;
+        </div>
+    `;
 
         this.showCustomModal(modalHtml, 'paymentDetailsModal');
     }
 
-    /**
-     * Export salary payments - CRITICAL MISSING METHOD
-     */
     async exportSalaryPayments() {
         try {
             if (this.salaryPayments.length === 0) {
@@ -398,6 +1318,24 @@ class SalaryManager {
         } catch (error) {
             console.error('Export error:', error);
             this.ui.showToast('Export failed', 'error');
+        }
+    }
+
+    async loadSalaryPaymentsData() {
+        try {
+            console.log('💰 Loading salary payments data...');
+            this.ui.showSectionLoading('salaryPaymentsContent', 'Loading salary payments...');
+
+            await this.loadSalaryPayments();
+            await this.loadSalaryPaymentsTable();
+            this.updateSalaryPaymentsSummary();
+
+            this.ui.showToast('Salary payments loaded successfully', 'success');
+        } catch (error) {
+            console.error('Error loading salary payments:', error);
+            this.ui.showToast('Error loading salary payments', 'error');
+        } finally {
+            this.ui.hideSectionLoading('salaryPaymentsContent');
         }
     }
 
@@ -439,20 +1377,6 @@ class SalaryManager {
         return attendanceData.status === 'present' ? 8.0 : 0;
     }
 
-    getTodaysAttendanceSummary() {
-        const today = new Date().toISOString().split('T')[0];
-        const todaysRecords = this.attendanceRecords.filter(record =>
-            record.attendance_date === today
-        );
-
-        return {
-            present: todaysRecords.filter(r => r.status === 'present').length,
-            absent: todaysRecords.filter(r => r.status === 'absent').length,
-            halfDay: todaysRecords.filter(r => r.status === 'half_day').length,
-            total: this.dailyEmployees.length
-        };
-    }
-
     // ==================== SALARY & ADVANCE SYSTEM ====================
 
     setupSalaryForm() {
@@ -461,7 +1385,6 @@ class SalaryManager {
             salaryForm.addEventListener('submit', (e) => this.handleSalarySubmit(e));
             this.populateEmployeeDropdown();
 
-            // Set today's date by default
             const salaryDate = document.getElementById('salaryDate');
             if (salaryDate) salaryDate.value = this.currentDate;
         }
@@ -514,7 +1437,6 @@ class SalaryManager {
             const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
             if (!employee) throw new Error('Employee not found');
 
-            // Save salary if amount > 0
             if (salary > 0) {
                 const salaryData = {
                     employee_id: employeeId,
@@ -530,7 +1452,6 @@ class SalaryManager {
                 await this.db.create('salary_records', salaryData);
             }
 
-            // Save advance if amount > 0
             if (advance > 0) {
                 const advanceData = {
                     employee_id: employeeId,
@@ -548,12 +1469,8 @@ class SalaryManager {
             }
 
             this.ui.showToast('Record saved successfully', 'success');
-
-            // Reset form but keep date
             e.target.reset();
             salaryDate.value = this.currentDate;
-
-            // Reload data
             await this.loadSalaryData();
 
         } catch (error) {
@@ -595,7 +1512,6 @@ class SalaryManager {
 
             await this.db.create('salary_payments', payment);
 
-            // Mark advances as deducted
             for (const advance of this.advanceRecords.filter(a =>
                 a.employee_id === paymentData.employee_id &&
                 a.status === 'pending'
@@ -620,14 +1536,12 @@ class SalaryManager {
         const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
         if (!employee) throw new Error('Employee not found');
 
-        // Get attendance for period
         const periodAttendance = this.attendanceRecords.filter(record =>
             record.employee_id === employeeId &&
             new Date(record.attendance_date) >= new Date(periodStart) &&
             new Date(record.attendance_date) <= new Date(periodEnd)
         );
 
-        // Get advances for period
         const periodAdvances = this.advanceRecords.filter(advance =>
             advance.employee_id === employeeId &&
             advance.status === 'pending' &&
@@ -635,12 +1549,10 @@ class SalaryManager {
             new Date(advance.record_date) <= new Date(periodEnd)
         );
 
-        // Calculate components
         const totalWorkHours = periodAttendance.reduce((sum, record) => sum + (record.work_hours || 0), 0);
         const totalOvertime = periodAttendance.reduce((sum, record) => sum + (record.overtime_hours || 0), 0);
         const totalAdvances = periodAdvances.reduce((sum, advance) => sum + (advance.amount || 0), 0);
 
-        // Simple daily wage calculation
         const workDays = periodAttendance.filter(a => a.status === 'present').length;
         const basicSalary = (employee.daily_rate || employee.basic_salary || 0) * workDays;
         const overtimeAmount = totalOvertime * ((employee.daily_rate || employee.basic_salary || 0) / 8) * 1.5;
@@ -679,10 +1591,8 @@ class SalaryManager {
                 generated_date: new Date().toISOString()
             };
 
-            // Generate A5 format PDF
             await this.generateA5PayslipPDF(payslipData);
 
-            // Update payment record
             await this.db.update('salary_payments', salaryPaymentId, {
                 payslip_generated: true
             });
@@ -702,12 +1612,10 @@ class SalaryManager {
             format: 'a5'
         });
 
-        // A5 dimensions: 148 x 210 mm
         const pageWidth = 148;
         const margin = 10;
         const contentWidth = pageWidth - (2 * margin);
 
-        // Company Header
         doc.setFontSize(16);
         doc.setFont('helvetica', 'bold');
         doc.text('BUSINESS MANAGER', pageWidth / 2, 15, { align: 'center' });
@@ -716,7 +1624,6 @@ class SalaryManager {
         doc.setFont('helvetica', 'normal');
         doc.text('Salary Payslip', pageWidth / 2, 22, { align: 'center' });
 
-        // Employee Details
         let yPosition = 35;
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
@@ -734,7 +1641,6 @@ class SalaryManager {
         doc.text(`Pay Period: ${Utils.formatDate(payslipData.payment.pay_period_start)} to ${Utils.formatDate(payslipData.payment.pay_period_end)}`, margin, yPosition);
         doc.text(`Payment Date: ${Utils.formatDate(payslipData.payment.payment_date)}`, margin + 70, yPosition);
 
-        // Salary Breakdown
         yPosition += 10;
         doc.setFont('helvetica', 'bold');
         doc.text('Salary Breakdown:', margin, yPosition);
@@ -765,7 +1671,6 @@ class SalaryManager {
             }
         });
 
-        // Attendance Summary
         yPosition += 5;
         doc.setFont('helvetica', 'bold');
         doc.text('Attendance Summary:', margin, yPosition);
@@ -775,36 +1680,13 @@ class SalaryManager {
         doc.text(`Work Days: ${payslipData.work_days}`, margin, yPosition);
         doc.text(`Total Hours: ${payslipData.total_hours.toFixed(1)}`, margin + 70, yPosition);
 
-        // Footer
         yPosition = 190;
         doc.setFontSize(8);
         doc.text('Generated on: ' + new Date().toLocaleDateString(), margin, yPosition);
         doc.text('Authorized Signature', pageWidth - margin, yPosition, { align: 'right' });
 
-        // Save PDF
         const fileName = `payslip_${payslipData.employee.id}_${payslipData.payment.payment_date}.pdf`;
         doc.save(fileName);
-    }
-
-    /**
-     * Load salary payments section data
-     */
-    async loadSalaryPaymentsData() {
-        try {
-            console.log('💰 Loading salary payments data...');
-            this.ui.showSectionLoading('salaryPaymentsContent', 'Loading salary payments...');
-
-            await this.loadSalaryPayments();
-            await this.loadSalaryPaymentsTable();
-            this.updateSalaryPaymentsSummary();
-
-            this.ui.showToast('Salary payments loaded successfully', 'success');
-        } catch (error) {
-            console.error('Error loading salary payments:', error);
-            this.ui.showToast('Error loading salary payments', 'error');
-        } finally {
-            this.ui.hideSectionLoading('salaryPaymentsContent');
-        }
     }
 
     // ==================== RENDER METHODS ====================
@@ -817,14 +1699,14 @@ class SalaryManager {
 
         if (filteredRecords.length === 0) {
             tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="no-data">
-                        <i class="fas fa-money-bill-wave"></i>
-                        <br>No records found
-                        ${this.currentDateFilter !== 'all' ? ' for selected filter' : ''}
-                    </td>
-                </tr>
-            `;
+            <tr>
+                <td colspan="8" class="no-data">
+                    <i class="fas fa-money-bill-wave"></i>
+                    <br>No records found
+                    ${this.currentDateFilter !== 'all' ? ' for selected filter' : ''}
+                </td>
+            </tr>
+        `;
             return;
         }
 
@@ -833,46 +1715,46 @@ class SalaryManager {
         tbody.innerHTML = Object.keys(groupedRecords).map(dateGroup => {
             const records = groupedRecords[dateGroup];
             return `
-                <tr class="date-group-header">
-                    <td colspan="8">
-                        <strong>${dateGroup}</strong>
-                        <span class="date-total">Total: ${Utils.formatCurrency(
+            <tr class="date-group-header">
+                <td colspan="8">
+                    <strong>${dateGroup}</strong>
+                    <span class="date-total">Total: ${Utils.formatCurrency(
                 records.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0)
             )}</span>
-                    </td>
-                </tr>
-                ${records.map(record => {
+                </td>
+            </tr>
+            ${records.map(record => {
                 const isAdvance = record.type === 'advance';
                 return `
-                        <tr class="${isAdvance ? 'advance-record' : 'salary-record'}">
-                            <td class="time-cell">${this.formatTime(record.record_date)}</td>
-                            <td><strong>${record.employee_id}</strong></td>
-                            <td>${record.employee_name}</td>
-                            <td>
-                                ${isAdvance ?
+                    <tr class="${isAdvance ? 'advance-record' : 'salary-record'}">
+                        <td class="time-cell">${this.formatTime(record.record_date)}</td>
+                        <td><strong>${record.employee_id}</strong></td>
+                        <td>${record.employee_name}</td>
+                        <td>
+                            ${isAdvance ?
                         '<span class="advance-badge"><i class="fas fa-hand-holding-usd"></i> Advance</span>' :
                         '<span class="salary-badge"><i class="fas fa-money-bill-wave"></i> Salary</span>'
                     }
-                            </td>
-                            <td>${Utils.formatCurrency(record.amount)}</td>
-                            <td>Week ${record.week_number}</td>
-                            <td>${isAdvance ? record.status : 'Paid'}</td>
-                            <td>
-                                <div class="action-buttons">
-                                    <button class="btn-secondary btn-sm" onclick="app.getManagers().salary.deleteRecord('${record.id}', '${record.type}')">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                    ${isAdvance && record.status === 'pending' ? `
-                                    <button class="btn-primary btn-sm" onclick="app.getManagers().salary.markAdvancePaid('${record.id}')">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                    ` : ''}
-                                </div>
-                            </td>
-                        </tr>
-                    `;
+                        </td>
+                        <td>${Utils.formatCurrency(record.amount)}</td>
+                        <td>Week ${record.week_number}</td>
+                        <td>${isAdvance ? record.status : 'Paid'}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-secondary btn-sm" onclick="app.getManagers().salary.deleteRecord('${record.id}', '${record.type}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                ${isAdvance && record.status === 'pending' ? `
+                                <button class="btn-primary btn-sm" onclick="app.getManagers().salary.markAdvancePaid('${record.id}')">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
             }).join('')}
-            `;
+        `;
         }).join('');
     }
 
@@ -881,13 +1763,11 @@ class SalaryManager {
     updateSummaryCards() {
         const attendanceSummary = this.getTodaysAttendanceSummary();
 
-        // Update attendance summary
         document.getElementById('presentTodayCount').textContent = attendanceSummary.present;
         document.getElementById('absentTodayCount').textContent = attendanceSummary.absent;
         document.getElementById('halfDayCount').textContent = attendanceSummary.halfDay;
         document.getElementById('totalEmployeesCount').textContent = attendanceSummary.total;
 
-        // Update salary summary
         const totalPaid = this.salaryRecords.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0);
         const pendingAdvances = this.advanceRecords.filter(a => a.status === 'pending')
             .reduce((sum, advance) => sum + parseFloat(advance.amount || 0), 0);
@@ -965,21 +1845,17 @@ class SalaryManager {
                 format: 'a3'
             });
 
-            // A3 dimensions: 297 x 420 mm
             const pageWidth = 420;
             const margin = 15;
 
-            // Title
             doc.setFontSize(20);
             doc.setFont('helvetica', 'bold');
             doc.text('Salary Records Report', pageWidth / 2, margin + 10, { align: 'center' });
 
-            // Date
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
             doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, margin + 20);
 
-            // Table data
             const tableData = allRecords.map(record => [
                 Utils.formatDate(record.record_date),
                 record.employee_id,
@@ -990,7 +1866,6 @@ class SalaryManager {
                 record.type === 'advance' ? record.status : 'Paid'
             ]);
 
-            // Create table
             doc.autoTable({
                 startY: margin + 25,
                 head: [['Date', 'Employee ID', 'Employee Name', 'Type', 'Amount', 'Week', 'Status']],
@@ -1120,94 +1995,58 @@ class SalaryManager {
 
     // ==================== EVENT LISTENERS & MODALS ====================
 
-    setupEventListeners() {
-        document.addEventListener('click', (e) => {
-            // Attendance button
-            if (e.target.id === 'markAttendanceBtn') {
-                this.showMarkAttendanceModal();
-                return;
-            }
-
-            // Salary payment button
-            if (e.target.id === 'processSalaryBtn') {
-                this.showProcessSalaryModal();
-                return;
-            }
-
-            // Export button
-            if (e.target.id === 'exportSalaryBtn') {
-                this.showExportOptions();
-                return;
-            }
-
-            // Date filter buttons
-            if (e.target.closest('[data-filter]')) {
-                const filter = e.target.closest('[data-filter]').getAttribute('data-filter');
-                this.applyDateFilter(filter);
-                return;
-            }
-
-            // Payslip generation
-            if (e.target.classList.contains('generate-payslip-btn')) {
-                const paymentId = e.target.getAttribute('data-payment-id');
-                this.generatePayslip(paymentId);
-                return;
-            }
-        });
-    }
-
     showMarkAttendanceModal() {
         const modalHtml = `
-            <div id="attendanceModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-calendar-check"></i> Mark Attendance</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <form id="attendanceForm" class="modal-form">
-                        <div class="form-group">
-                            <label>Employee *</label>
-                            <select id="attendanceEmployeeId" required>
-                                <option value="">Select Employee</option>
-                                ${this.dailyEmployees.map(emp => `
-                                    <option value="${emp.id}">${emp.name} (${emp.id})</option>
-                                `).join('')}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Date *</label>
-                            <input type="date" id="attendanceDate" required value="${this.currentDate}">
-                        </div>
-                        <div class="form-group">
-                            <label>Status *</label>
-                            <select id="attendanceStatus" required>
-                                <option value="present">Present</option>
-                                <option value="absent">Absent</option>
-                                <option value="half_day">Half Day</option>
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Check In Time</label>
-                                <input type="time" id="checkInTime">
-                            </div>
-                            <div class="form-group">
-                                <label>Check Out Time</label>
-                                <input type="time" id="checkOutTime">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Notes</label>
-                            <textarea id="attendanceNotes" placeholder="Add any notes"></textarea>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                            <button type="submit" class="btn-primary">Mark Attendance</button>
-                        </div>
-                    </form>
+        <div id="attendanceModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-calendar-check"></i> Mark Attendance</h3>
+                    <button class="modal-close">&times;</button>
                 </div>
+                <form id="attendanceForm" class="modal-form">
+                    <div class="form-group">
+                        <label>Employee *</label>
+                        <select id="attendanceEmployeeId" required>
+                            <option value="">Select Employee</option>
+                            ${this.dailyEmployees.map(emp => `
+                                <option value="${emp.id}">${emp.name} (${emp.id})</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="attendanceDate" required value="${this.currentDate}">
+                    </div>
+                    <div class="form-group">
+                        <label>Status *</label>
+                        <select id="attendanceStatus" required>
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                            <option value="half_day">Half Day</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Check In Time</label>
+                            <input type="time" id="checkInTime">
+                        </div>
+                        <div class="form-group">
+                            <label>Check Out Time</label>
+                            <input type="time" id="checkOutTime">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="attendanceNotes" placeholder="Add any notes"></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                        <button type="submit" class="btn-primary">Mark Attendance</button>
+                    </div>
+                </form>
             </div>
-        `;
+        </div>
+    `;
 
         this.showCustomModal(modalHtml, 'attendanceModal');
 
@@ -1233,74 +2072,74 @@ class SalaryManager {
 
     showProcessSalaryModal() {
         const modalHtml = `
-            <div id="salaryPaymentModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-money-check"></i> Process Salary Payment</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <form id="salaryPaymentForm" class="modal-form">
-                        <div class="form-group">
-                            <label>Employee *</label>
-                            <select id="salaryEmployeeId" required>
-                                <option value="">Select Employee</option>
-                                ${this.dailyEmployees.map(emp => `
-                                    <option value="${emp.id}">${emp.name} (${emp.id})</option>
-                                `).join('')}
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Pay Period Start *</label>
-                                <input type="date" id="payPeriodStart" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Pay Period End *</label>
-                                <input type="date" id="payPeriodEnd" required>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Payment Date *</label>
-                            <input type="date" id="paymentDate" required value="${this.currentDate}">
-                        </div>
-                        <div class="form-group">
-                            <label>Payment Method *</label>
-                            <select id="paymentMethod" required>
-                                <option value="cash">Cash</option>
-                                <option value="bank_transfer">Bank Transfer</option>
-                                <option value="cheque">Cheque</option>
-                            </select>
-                        </div>
-                        <div id="salaryPreview" class="salary-preview" style="display: none;">
-                            <h4>Salary Preview</h4>
-                            <div class="preview-items">
-                                <div class="preview-item">
-                                    <span>Basic Salary:</span>
-                                    <span id="previewBasicSalary">₹0</span>
-                                </div>
-                                <div class="preview-item">
-                                    <span>Overtime:</span>
-                                    <span id="previewOvertime">₹0</span>
-                                </div>
-                                <div class="preview-item">
-                                    <span>Advances Deducted:</span>
-                                    <span id="previewAdvances">-₹0</span>
-                                </div>
-                                <div class="preview-item total">
-                                    <span>Net Salary:</span>
-                                    <span id="previewNetSalary">₹0</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn-secondary modal-cancel">Cancel</button>
-                            <button type="button" id="calculateSalaryBtn" class="btn-secondary">Calculate</button>
-                            <button type="submit" class="btn-primary">Process Payment</button>
-                        </div>
-                    </form>
+        <div id="salaryPaymentModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-money-check"></i> Process Salary Payment</h3>
+                    <button class="modal-close">&times;</button>
                 </div>
+                <form id="salaryPaymentForm" class="modal-form">
+                    <div class="form-group">
+                        <label>Employee *</label>
+                        <select id="salaryEmployeeId" required>
+                            <option value="">Select Employee</option>
+                            ${this.dailyEmployees.map(emp => `
+                                <option value="${emp.id}">${emp.name} (${emp.id})</option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Pay Period Start *</label>
+                            <input type="date" id="payPeriodStart" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Pay Period End *</label>
+                            <input type="date" id="payPeriodEnd" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Date *</label>
+                        <input type="date" id="paymentDate" required value="${this.currentDate}">
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Method *</label>
+                        <select id="paymentMethod" required>
+                            <option value="cash">Cash</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="cheque">Cheque</option>
+                        </select>
+                    </div>
+                    <div id="salaryPreview" class="salary-preview" style="display: none;">
+                        <h4>Salary Preview</h4>
+                        <div class="preview-items">
+                            <div class="preview-item">
+                                <span>Basic Salary:</span>
+                                <span id="previewBasicSalary">₹0</span>
+                            </div>
+                            <div class="preview-item">
+                                <span>Overtime:</span>
+                                <span id="previewOvertime">₹0</span>
+                            </div>
+                            <div class="preview-item">
+                                <span>Advances Deducted:</span>
+                                <span id="previewAdvances">-₹0</span>
+                            </div>
+                            <div class="preview-item total">
+                                <span>Net Salary:</span>
+                                <span id="previewNetSalary">₹0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn-secondary modal-cancel">Cancel</button>
+                        <button type="button" id="calculateSalaryBtn" class="btn-secondary">Calculate</button>
+                        <button type="submit" class="btn-primary">Process Payment</button>
+                    </div>
+                </form>
             </div>
-        `;
+        </div>
+    `;
 
         this.showCustomModal(modalHtml, 'salaryPaymentModal');
 
@@ -1346,27 +2185,64 @@ class SalaryManager {
 
     showExportOptions() {
         const exportHtml = `
-            <div id="exportSalaryModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-download"></i> Export Salary Records</h3>
-                        <button class="modal-close">&times;</button>
+        <div id="exportSalaryModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> Export Salary Records</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="export-options">
+                    <div class="export-option" onclick="app.getManagers().salary.exportSalaryToExcel()">
+                        <i class="fas fa-file-excel"></i>
+                        <span>Export to Excel</span>
                     </div>
-                    <div class="export-options">
-                        <div class="export-option" onclick="app.getManagers().salary.exportSalaryToExcel()">
-                            <i class="fas fa-file-excel"></i>
-                            <span>Export to Excel</span>
-                        </div>
-                        <div class="export-option" onclick="app.getManagers().salary.exportSalaryToPDF()">
-                            <i class="fas fa-file-pdf"></i>
-                            <span>Export to PDF (A3)</span>
-                        </div>
+                    <div class="export-option" onclick="app.getManagers().salary.exportSalaryToPDF()">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>Export to PDF (A3)</span>
                     </div>
                 </div>
             </div>
-        `;
+        </div>
+    `;
 
         this.showCustomModal(exportHtml, 'exportSalaryModal');
+    }
+
+    setupEventListeners() {
+        document.addEventListener('click', (e) => {
+            // Enhanced quick actions
+            if (e.target.id === 'quickAttendanceBtn' || e.target.closest('#quickAttendanceBtn')) {
+                this.showQuickAttendanceModal();
+                return;
+            }
+
+            if (e.target.id === 'bulkSalaryBtn' || e.target.closest('#bulkSalaryBtn')) {
+                this.showBulkSalaryModal();
+                return;
+            }
+
+            // Keep existing event listeners
+            if (e.target.id === 'markAttendanceBtn') {
+                this.showMarkAttendanceModal();
+                return;
+            }
+
+            if (e.target.id === 'processSalaryBtn') {
+                this.showProcessSalaryModal();
+                return;
+            }
+
+            if (e.target.id === 'exportSalaryBtn') {
+                this.showExportOptions();
+                return;
+            }
+
+            if (e.target.closest('[data-filter]')) {
+                const filter = e.target.closest('[data-filter]').getAttribute('data-filter');
+                this.applyDateFilter(filter);
+                return;
+            }
+        });
     }
 
     showCustomModal(html, modalId) {
@@ -1377,7 +2253,7 @@ class SalaryManager {
     }
 
     cleanup() {
-        console.log('Salary Manager cleanup');
+        console.log('Enhanced Salary Manager cleanup');
     }
 }
 

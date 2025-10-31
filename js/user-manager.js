@@ -60,10 +60,11 @@ class UserManager {
                 this.showAddUserModal();
             }
 
+            // In UserManager setupEventListeners method
             if (e.target.id === 'exportUsersBtn' || e.target.closest('#exportUsersBtn')) {
                 e.preventDefault();
                 e.stopPropagation();
-                this.exportUsers();
+                this.showExportOptions(); // Changed from this.exportUsers()
             }
         });
 
@@ -440,7 +441,154 @@ class UserManager {
             this.ui.hideLoading();
         }
     }
+    // In UserManager - update showExportOptions method
+    showExportOptions() {
+        this.showExportModal('users', ['excel', 'pdf']); // Now includes PDF
+    }
 
+    showExportModal(type, allowedFormats = ['excel', 'pdf']) {
+        const titles = {
+            'users': 'Users',
+            'employees': 'Employees',
+            'bills': 'Bills',
+            'pending': 'Pending Bills',
+            'payments': 'Payments'
+        };
+
+        const formatOptions = allowedFormats.map(format => {
+            const formatInfo = {
+                'excel': { icon: 'fa-file-excel', class: 'excel', label: 'Excel' },
+                'pdf': { icon: 'fa-file-pdf', class: 'pdf', label: 'PDF' }
+            }[format];
+
+            return `
+            <div class="export-option" onclick="app.getManagers().${type === 'users' ? 'user' : 'employee'}.exportTo${format.toUpperCase()}('${type}')">
+                <div class="export-icon ${formatInfo.class}">
+                    <i class="fas ${formatInfo.icon}"></i>
+                </div>
+                <div class="export-info">
+                    <h4>Export to ${formatInfo.label}</h4>
+                    <p>Download as .${format} file for ${format === 'excel' ? 'data analysis' : 'reporting'}</p>
+                </div>
+                <div class="export-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        `;
+        }).join('');
+
+        const exportHtml = `
+        <div id="exportModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> Export ${titles[type]}</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                
+                <div class="export-options">
+                    ${formatOptions}
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn-secondary" onclick="app.getManagers().${type === 'users' ? 'user' : 'employee'}.closeExportModal()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+        this.showCustomModal(exportHtml, 'exportModal');
+    }
+
+    closeExportModal() {
+        this.ui.hideModal('exportModal');
+        const modal = document.getElementById('exportModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    async exportToExcel(type) {
+        await this.exportData(type, 'excel');
+        this.closeExportModal();
+    }
+
+    async exportToPDF(type) {
+        await this.exportData(type, 'pdf');
+        this.closeExportModal();
+    }
+
+
+    // Update exportData method
+    async exportData(type, format = 'excel') {
+        try {
+            if (!this.auth.hasPermission('admin')) {
+                this.ui.showToast('Insufficient permissions to export data', 'error');
+                return;
+            }
+
+            this.ui.showExportProgress(`Preparing ${type} data...`);
+
+            let data = [];
+            let filename = '';
+            let title = '';
+
+            switch (type) {
+                case 'users':
+                    data = this.users;
+                    filename = `users_export_${new Date().toISOString().split('T')[0]}`;
+                    title = 'Users Report';
+                    break;
+                default:
+                    throw new Error(`Unknown export type: ${type}`);
+            }
+
+            if (data.length === 0) {
+                this.ui.showToast(`No ${type} data to export`, 'warning');
+                return;
+            }
+
+            const exportData = data.map(user => ({
+                'Name': user.name,
+                'Username': user.username,
+                'Email': user.email || '',
+                'Phone': user.phone || '',
+                'Role': this.formatRoleName(user.role),
+                'Status': user.status,
+                'Created Date': this.formatDate(user.created_at)
+            }));
+
+            // Use the unified export method
+            if (window.exportManager) {
+                await window.exportManager.exportData(exportData, format, filename, title);
+            } else {
+                // Fallback to direct Utils
+                if (format === 'pdf') {
+                    await Utils.exportToPDF(exportData, filename, title);
+                } else {
+                    Utils.exportToExcel(exportData, filename);
+                }
+            }
+
+            this.ui.showToast(`${title} exported successfully`, 'success');
+        } catch (error) {
+            console.error(`Error exporting ${type}:`, error);
+            this.ui.showToast(`Error exporting ${type}: ${error.message}`, 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
+
+    showCustomModal(html, modalId) {
+        const existingModal = document.getElementById(modalId);
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        document.body.insertAdjacentHTML('beforeend', html);
+        this.ui.showModal(modalId);
+    }
     async exportUsers() {
         try {
             console.log('📤 Starting user export...');

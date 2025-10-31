@@ -31,7 +31,7 @@ class AttendanceManager {
                 this.loadEmployees(),
                 this.loadAttendanceData()
             ]);
-            
+
             this.setupEventListeners();
             this.initialized = true;
             console.log('✅ Attendance manager initialized successfully');
@@ -45,7 +45,7 @@ class AttendanceManager {
 
     async loadEmployees() {
         if (this.isLoading) return;
-        
+
         try {
             this.employees = await this.db.getEmployees() || [];
             console.log('👥 Loaded', this.employees.length, 'employees');
@@ -57,11 +57,11 @@ class AttendanceManager {
 
     async loadAttendanceData(filters = {}) {
         if (this.isLoading) return [];
-        
+
         this.isLoading = true;
         try {
             console.log('📊 Loading attendance records...');
-            
+
             let records;
             if (this.db.getAttendanceRecords) {
                 records = await this.db.getAttendanceRecords(filters);
@@ -84,16 +84,16 @@ class AttendanceManager {
     async refreshAttendanceData() {
         try {
             this.ui.showSectionLoading('attendanceContent', 'Refreshing data...');
-            
+
             // Load data in parallel
             await Promise.all([
                 this.loadEmployees(),
                 this.loadAttendanceData()
             ]);
-            
+
             this.renderAttendanceTable();
             this.updateAttendanceSummary();
-            
+
             this.ui.showToast('Attendance data refreshed', 'success');
         } catch (error) {
             console.error('Error refreshing attendance data:', error);
@@ -257,9 +257,9 @@ class AttendanceManager {
                             </div>
                             <div class="hours-display">
                                 <span class="hours">${this.calculateWorkHours(
-                                    todayRecord?.check_in_time || '09:00',
-                                    todayRecord?.check_out_time || '18:00'
-                                ).toFixed(1)}h</span>
+                todayRecord?.check_in_time || '09:00',
+                todayRecord?.check_out_time || '18:00'
+            ).toFixed(1)}h</span>
                             </div>
                         </div>
                     </div>

@@ -35,10 +35,10 @@ class EmployeeManager {
     async initialize() {
         try {
             console.log('🔄 Initializing EmployeeManager...');
-            
+
             await this.loadEmployees();
             await this.loadOptionalData();
-            
+
             this.setupEventListeners();
             console.log('✅ EmployeeManager initialization complete');
         } catch (error) {
@@ -47,13 +47,24 @@ class EmployeeManager {
         return Promise.resolve();
     }
 
+    // In EmployeeManager - update loadEmployees method
     async loadEmployees() {
+        // Prevent duplicate loading
+        if (this.isLoading) {
+            console.log('🔄 Employee load already in progress, skipping...');
+            return;
+        }
+
         try {
+            this.isLoading = true;
             console.log('👥 Loading employees...');
             this.ui.showSectionLoading('employeesContent', 'Loading employees...');
 
-            this.employees = await this.db.getEmployees() || [];
-            console.log('✅ Employees loaded:', this.employees.length);
+            // Only load if we don't have data or need refresh
+            if (this.employees.length === 0) {
+                this.employees = await this.db.getEmployees() || [];
+                console.log('✅ Employees loaded:', this.employees.length);
+            }
 
             this.renderEmployeesTable(this.employees);
             this.updateSearchResultsCount();
@@ -66,6 +77,7 @@ class EmployeeManager {
             this.renderEmployeesTable([]);
         } finally {
             this.ui.hideSectionLoading('employeesContent');
+            this.isLoading = false;
         }
     }
 
@@ -195,9 +207,10 @@ class EmployeeManager {
             return;
         }
 
+        // In EmployeeManager handleGlobalClick method
         if (e.target.id === 'exportEmployeesBtn' || e.target.closest('#exportEmployeesBtn')) {
             e.preventDefault();
-            this.exportEmployees();
+            this.showExportOptions(); // Changed from this.exportEmployees()
             return;
         }
 
@@ -250,7 +263,7 @@ class EmployeeManager {
         document.getElementById('employeeForm').reset();
         document.getElementById('editEmployeeId').value = '';
         document.getElementById('employeeJoinDate').value = new Date().toISOString().split('T')[0];
-        
+
         document.getElementById('vehicleNumberField').style.display = 'none';
     }
 
@@ -274,7 +287,7 @@ class EmployeeManager {
 
         try {
             const employee = this.employees.find(emp => emp.id === employeeId);
-            
+
             if (employee) {
                 document.getElementById('employeeModalTitle').textContent = 'Edit Employee';
                 document.getElementById('editEmployeeId').value = employee.id;
@@ -283,15 +296,15 @@ class EmployeeManager {
                 document.getElementById('employeeEmail').value = employee.email || '';
                 document.getElementById('employeeRole').value = employee.role || '';
                 document.getElementById('employeeJoinDate').value = employee.join_date || new Date().toISOString().split('T')[0];
-                
+
                 const employeeType = employee.employee_type || 'employee';
                 document.querySelector(`input[name="employeeType"][value="${employeeType}"]`).checked = true;
                 this.handleEmployeeTypeChange(employeeType);
-                
+
                 if (employeeType === 'driver') {
                     document.getElementById('employeeVehicleNumber').value = employee.vehicle_number || '';
                 }
-                
+
                 const salaryType = employee.salary_type || 'daily';
                 document.querySelector(`input[name="salaryType"][value="${salaryType}"]`).checked = true;
 
@@ -525,7 +538,7 @@ class EmployeeManager {
         tbody.innerHTML = employees.map(employee => {
             const pendingAdvances = this.calculatePendingAdvances(employee.id);
             const familyGroup = this.familyGroups.find(fg => fg.id === employee.family_group_id);
-            
+
             return `
                 <tr class="employee-row" data-employee-id="${employee.id}">
                     <td><strong>${employee.id || 'N/A'}</strong></td>
@@ -829,7 +842,154 @@ class EmployeeManager {
             throw error;
         }
     }
+    // In EmployeeManager - update showExportOptions method
+    showExportOptions() {
+        this.showExportModal('employees', ['excel', 'pdf']); // Now includes PDF
+    }
 
+    showExportModal(type, allowedFormats = ['excel', 'pdf']) {
+        const titles = {
+            'employees': 'Employees',
+            'users': 'Users',
+            'bills': 'Bills',
+            'pending': 'Pending Bills',
+            'payments': 'Payments'
+        };
+
+        const formatOptions = allowedFormats.map(format => {
+            const formatInfo = {
+                'excel': { icon: 'fa-file-excel', class: 'excel', label: 'Excel' },
+                'pdf': { icon: 'fa-file-pdf', class: 'pdf', label: 'PDF' }
+            }[format];
+
+            return `
+            <div class="export-option" onclick="app.getManagers().${type === 'employees' ? 'employee' : 'user'}.exportTo${format.toUpperCase()}('${type}')">
+                <div class="export-icon ${formatInfo.class}">
+                    <i class="fas ${formatInfo.icon}"></i>
+                </div>
+                <div class="export-info">
+                    <h4>Export to ${formatInfo.label}</h4>
+                    <p>Download as .${format} file for ${format === 'excel' ? 'data analysis' : 'reporting'}</p>
+                </div>
+                <div class="export-arrow">
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+            </div>
+        `;
+        }).join('');
+
+        const exportHtml = `
+        <div id="exportModal" class="modal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> Export ${titles[type]}</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                
+                <div class="export-options">
+                    ${formatOptions}
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn-secondary" onclick="app.getManagers().${type === 'employees' ? 'employee' : 'user'}.closeExportModal()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+        this.showCustomModal(exportHtml, 'exportModal');
+    }
+
+    closeExportModal() {
+        this.ui.hideModal('exportModal');
+        const modal = document.getElementById('exportModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    async exportToExcel(type) {
+        await this.exportData(type, 'excel');
+        this.closeExportModal();
+    }
+
+    async exportToPDF(type) {
+        await this.exportData(type, 'pdf');
+        this.closeExportModal();
+    }
+
+
+
+    // Update exportData method to handle PDF properly
+    async exportData(type, format = 'excel') {
+        try {
+            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
+                this.ui.showToast('Insufficient permissions to export data', 'error');
+                return;
+            }
+
+            this.ui.showExportProgress(`Preparing ${type} data...`);
+
+            let data = [];
+            let filename = '';
+            let title = '';
+
+            switch (type) {
+                case 'employees':
+                    data = this.employees;
+                    filename = `employees_export_${new Date().toISOString().split('T')[0]}`;
+                    title = 'Employees Report';
+                    break;
+                default:
+                    throw new Error(`Unknown export type: ${type}`);
+            }
+
+            if (data.length === 0) {
+                this.ui.showToast(`No ${type} data to export`, 'warning');
+                return;
+            }
+
+            const exportData = data.map(employee => {
+                const familyGroup = this.familyGroups.find(fg => fg.id === employee.family_group_id);
+
+                return {
+                    'Employee ID': employee.id,
+                    'Name': employee.name,
+                    'Phone': employee.phone || '',
+                    'Email': employee.email || '',
+                    'Role': employee.role || '',
+                    'Type': employee.employee_type === 'driver' ? 'Driver' : 'Employee',
+                    'Vehicle Number': employee.vehicle_number || '',
+                    'Salary Type': employee.salary_type === 'monthly' ? 'Monthly' : 'Daily',
+                    'Join Date': this.formatDate(employee.join_date),
+                    'Status': employee.status || 'active',
+                    'Family Group': familyGroup ? familyGroup.family_name : '',
+                    'Created Date': this.formatDate(employee.created_at)
+                };
+            });
+
+            // Use the unified export method
+            if (window.exportManager) {
+                await window.exportManager.exportData(exportData, format, filename, title);
+            } else {
+                // Fallback to direct Utils
+                if (format === 'pdf') {
+                    await Utils.exportToPDF(exportData, filename, title);
+                } else {
+                    Utils.exportToExcel(exportData, filename);
+                }
+            }
+
+            this.ui.showToast(`${title} exported successfully`, 'success');
+        } catch (error) {
+            console.error(`Error exporting ${type}:`, error);
+            this.ui.showToast(`Error exporting ${type}: ${error.message}`, 'error');
+        } finally {
+            this.ui.hideExportProgress();
+        }
+    }
     async exportEmployees() {
         try {
             if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
@@ -846,7 +1006,7 @@ class EmployeeManager {
 
             const exportData = this.employees.map(employee => {
                 const familyGroup = this.familyGroups.find(fg => fg.id === employee.family_group_id);
-                
+
                 return {
                     'Employee ID': employee.id,
                     'Name': employee.name,

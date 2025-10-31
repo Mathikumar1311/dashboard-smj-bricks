@@ -302,19 +302,31 @@
                     </div>
                 </div>
 
-                <!-- Salary Management Section -->
                 <div id="salaryContent" class="content-section">
                     <div class="content-header">
-                        <h2><i class="fas fa-money-bill-wave"></i> Salary Management</h2>
+                        <h2><i class="fas fa-money-bill-wave"></i> Salary Dashboard</h2>
                         <div class="header-actions">
-                            <button id="markAttendanceBtn" class="btn-primary">
-                                <i class="fas fa-calendar-check"></i> Mark Attendance
+                            <button id="quickAttendanceBtn" class="btn-primary">
+                                <i class="fas fa-user-check"></i> Quick Attendance
+                            </button>
+                            <button id="bulkSalaryBtn" class="btn-success">
+                                <i class="fas fa-money-bill-wave"></i> Bulk Salary
                             </button>
                             <button id="exportSalaryBtn" class="btn-secondary">
                                 <i class="fas fa-download"></i> Export
                             </button>
                         </div>
                     </div>
+
+                    <!-- Quick Actions Panel -->
+                    <div id="quickActions"></div>
+
+                    <!-- Employee Grid View -->
+                    <div class="section-title">
+                        <h3><i class="fas fa-users"></i> Daily Employees</h3>
+                        <span class="badge" id="dailyEmployeeCountBadge">0 employees</span>
+                    </div>
+                    <div id="employeeGrid" class="employee-grid"></div>
 
                     <!-- Summary Cards -->
                     <div class="summary-cards">
@@ -415,6 +427,7 @@
                         </table>
                     </div>
                 </div>
+
 
                 <!-- NEW: Attendance Section -->
                 <div id="attendanceContent" class="content-section">

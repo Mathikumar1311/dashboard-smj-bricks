@@ -578,4 +578,3 @@ class Utils {
 
 // Make Utils available globally
 window.Utils = Utils;
-
