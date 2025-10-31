@@ -1,6 +1,6 @@
 {
   "name": "business-dashboard",
-  "version": "1.0.7",
+  "version": "1.0.11",
   "description": "Business Management Dashboard with Supabase Integration",
   "main": "main.js",
   "homepage": "./",
