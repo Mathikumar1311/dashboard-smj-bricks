@@ -1,56 +1,82 @@
 class UserManager {
     constructor(dependencies) {
+        if (!dependencies) throw new Error('UserManager: dependencies required');
+        if (!dependencies.db) throw new Error('UserManager: db dependency is required');
+        if (!dependencies.ui) throw new Error('UserManager: ui dependency is required');
+        if (!dependencies.auth) throw new Error('UserManager: auth dependency is required');
+
         this.db = dependencies.db;
         this.ui = dependencies.ui;
         this.auth = dependencies.auth;
         this.users = [];
         this.isInitialized = false;
+
+        console.log('✅ UserManager initialized');
     }
 
     async initialize() {
-        await this.setupEventListeners();
-        this.isInitialized = true;
-        console.log('✅ UserManager initialized');
+        try {
+            console.log('🔄 Initializing UserManager...');
+            await this.loadUsers();
+            this.setupEventListeners();
+            console.log('✅ UserManager initialization complete');
+        } catch (error) {
+            console.error('❌ UserManager initialization failed:', error);
+        }
         return Promise.resolve();
+    }
+
+    async loadUsers() {
+        try {
+            console.log('👥 Loading users...');
+            this.ui.showSectionLoading('usersContent', 'Loading users...');
+
+            this.users = await this.db.getUsers() || [];
+            console.log('✅ Users loaded:', this.users.length);
+
+            this.renderUsersTable(this.users);
+            this.ui.showToast('Users loaded successfully', 'success');
+
+        } catch (error) {
+            console.error('❌ Error loading users:', error);
+            this.ui.showToast('Error loading users: ' + error.message, 'error');
+            this.users = [];
+            this.renderUsersTable([]);
+        } finally {
+            this.ui.hideSectionLoading('usersContent');
+        }
     }
 
     setupEventListeners() {
         console.log('🔧 Setting up UserManager event listeners...');
 
-        // Remove any existing listeners first
         this.cleanup();
 
-        // Use event delegation for dynamic elements
         document.addEventListener('click', (e) => {
-            // Add User button
             if (e.target.id === 'addUserBtn' || e.target.closest('#addUserBtn')) {
                 e.preventDefault();
-                e.stopPropagation(); // Prevent event bubbling
+                e.stopPropagation();
                 console.log('🎯 Add User button clicked');
                 this.showAddUserModal();
             }
 
-            // Export Users button
             if (e.target.id === 'exportUsersBtn' || e.target.closest('#exportUsersBtn')) {
                 e.preventDefault();
-                e.stopPropagation(); // Prevent event bubbling
+                e.stopPropagation();
                 this.exportUsers();
             }
         });
 
-        // COMPLETE WORKING PASSWORD TOGGLE SOLUTION
         class PasswordToggle {
             static init() {
                 console.log('🔧 Initializing PasswordToggle...');
 
-                // Method 1: Event delegation (works for dynamic content)
                 document.addEventListener('click', (e) => {
                     if (e.target.closest('.password-toggle')) {
                         PasswordToggle.handleToggle(e.target.closest('.password-toggle'));
                     }
                 });
 
-                // Method 2: Direct event listeners (as backup)
                 document.querySelectorAll('.password-toggle').forEach(toggle => {
                     toggle.addEventListener('click', (e) => {
                         e.preventDefault();
@@ -91,30 +117,23 @@ class UserManager {
             }
         }
 
-        // Initialize when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => PasswordToggle.init());
         } else {
             PasswordToggle.init();
         }
 
-        // User form submission
         const userForm = document.getElementById('userForm');
         if (userForm) {
-            // Remove existing listener first
             userForm.removeEventListener('submit', this.handleUserSubmit);
             userForm.addEventListener('submit', (e) => this.handleUserSubmit(e));
         }
 
-        // Search functionality
         const userSearch = document.getElementById('userSearch');
         if (userSearch) {
             userSearch.removeEventListener('input', this.searchUsers);
             userSearch.addEventListener('input', (e) => this.searchUsers(e.target.value));
         }
-
-        // ❌ REMOVE THIS - Let UIManager handle all modal closing
-        // Modal close/cancel buttons are now handled by UIManager
 
         console.log('✅ UserManager event listeners setup complete');
     }
@@ -127,10 +146,8 @@ class UserManager {
             return;
         }
 
-        // Use the UI manager to handle ALL modal operations
         this.ui.showModal('userModal');
 
-        // Small delay to ensure modal is fully rendered
         setTimeout(() => {
             this.safeExecute(() => {
                 const modalTitle = document.getElementById('userModalTitle');
@@ -147,7 +164,6 @@ class UserManager {
                 if (userStatus) userStatus.value = 'active';
                 if (userRole) userRole.value = 'user';
 
-                // ✅ NEW: Clear password fields
                 if (userPassword) userPassword.value = '';
                 if (userConfirmPassword) userConfirmPassword.value = '';
 
@@ -156,32 +172,12 @@ class UserManager {
         }, 50);
     }
 
-    // Add this safeExecute method to UserManager
     safeExecute(operation, context = 'operation') {
         try {
             return operation();
         } catch (error) {
             console.error(`❌ ${context} failed:`, error);
             return null;
-        }
-    }
-
-    async loadUsers() {
-        try {
-            console.log('👥 Loading users...');
-            this.ui.showSectionLoading('usersContent', 'Loading users...');
-
-            this.users = await this.db.getUsers();
-            this.renderUsersTable(this.users);
-
-            this.ui.showToast('Users loaded successfully', 'success');
-            return this.users;
-        } catch (error) {
-            console.error('❌ Error loading users:', error);
-            this.ui.showToast('Error loading users: ' + error.message, 'error');
-            throw error;
-        } finally {
-            this.ui.hideSectionLoading('usersContent');
         }
     }
 
@@ -265,47 +261,6 @@ class UserManager {
         }
     }
 
-    showAddUserModal() {
-        console.log('🔄 Checking permissions for adding user...');
-
-        if (!this.auth.hasPermission('admin')) {
-            this.ui.showToast('Insufficient permissions to create users', 'error');
-            return;
-        }
-
-        // Use the UI manager to handle ALL modal operations
-        this.ui.showModal('userModal');
-
-        // Small delay to ensure modal is fully rendered
-        setTimeout(() => {
-            this.safeExecute(() => {
-                const modalTitle = document.getElementById('userModalTitle');
-                const userForm = document.getElementById('userForm');
-                const editUserId = document.getElementById('editUserId');
-                const userStatus = document.getElementById('userStatus');
-                const userRole = document.getElementById('userRole');
-
-                if (modalTitle) modalTitle.textContent = 'Add User';
-                if (userForm) userForm.reset();
-                if (editUserId) editUserId.value = '';
-                if (userStatus) userStatus.value = 'active';
-                if (userRole) userRole.value = 'user';
-
-                console.log('✅ Add user modal fully initialized');
-            });
-        }, 50);
-    }
-
-    // Add this safeExecute method to UserManager
-    safeExecute(operation, context = 'operation') {
-        try {
-            return operation();
-        } catch (error) {
-            console.error(`❌ ${context} failed:`, error);
-            return null;
-        }
-    }
-
     async editUser(userId) {
         if (!this.auth.hasPermission('admin')) {
             this.ui.showToast('Insufficient permissions to edit users', 'error');
@@ -325,11 +280,9 @@ class UserManager {
                 document.getElementById('userRole').value = user.role;
                 document.getElementById('userStatus').value = user.status || 'active';
 
-                // ✅ NEW: Clear password fields when editing
                 document.getElementById('userPassword').value = '';
                 document.getElementById('userConfirmPassword').value = '';
 
-                // ✅ NEW: Add placeholder to indicate optional password change
                 document.getElementById('userPassword').placeholder = 'Leave blank to keep current password';
                 document.getElementById('userConfirmPassword').placeholder = 'Leave blank to keep current password';
 
@@ -360,18 +313,15 @@ class UserManager {
         const role = document.getElementById('userRole').value;
         const status = document.getElementById('userStatus').value;
 
-        // ✅ NEW: Get password fields
         const password = document.getElementById('userPassword').value;
         const confirmPassword = document.getElementById('userConfirmPassword').value;
 
-        // Validate inputs
         if (!name) {
             this.ui.showToast('Name is required', 'error');
             return;
         }
 
-        // ✅ NEW: Password validation for new users
-        if (!userId) { // Only validate password for new users
+        if (!userId) {
             if (!password) {
                 this.ui.showToast('Password is required', 'error');
                 return;
@@ -414,7 +364,6 @@ class UserManager {
             };
 
             if (userId) {
-                // Update existing user - only update password if provided
                 if (password) {
                     if (password.length < 6) {
                         this.ui.showToast('Password must be at least 6 characters long', 'error');
@@ -430,9 +379,8 @@ class UserManager {
                 await this.db.update('users', userId, userData);
                 this.ui.showToast('User updated successfully', 'success');
             } else {
-                // Create new user
                 userData.username = this.generateUsername(name);
-                userData.password = password; // ✅ Use the provided password
+                userData.password = password;
                 userData.created_at = new Date().toISOString();
 
                 await this.db.create('users', userData);
@@ -454,7 +402,6 @@ class UserManager {
             .replace(/\s+/g, '.')
             .replace(/[^a-z0-9.]/g, '');
 
-        // Add timestamp to ensure uniqueness
         const timestamp = Date.now().toString().slice(-4);
         return `${baseUsername}.${timestamp}`;
     }
@@ -498,7 +445,6 @@ class UserManager {
         try {
             console.log('📤 Starting user export...');
 
-            // Show export progress
             if (this.ui.showExportProgress) {
                 this.ui.showExportProgress('Preparing user data...');
             } else {
@@ -521,13 +467,11 @@ class UserManager {
                 'Created Date': this.formatDate(user.created_at)
             }));
 
-            // Try exportManager first, then fallback to Utils
             if (window.exportManager && typeof window.exportManager.exportToExcel === 'function') {
                 await window.exportManager.exportToExcel(exportData, 'users_export', 'Users Export');
             } else if (window.Utils && typeof window.Utils.exportToExcel === 'function') {
                 window.Utils.exportToExcel(exportData, 'users_export');
             } else {
-                // Fallback export implementation
                 this.fallbackExport(exportData, 'users_export');
             }
 
@@ -547,7 +491,6 @@ class UserManager {
     }
 
     fallbackExport(data, filename) {
-        // Simple CSV export fallback
         if (!data || data.length === 0) return;
 
         const headers = Object.keys(data[0]);
@@ -606,7 +549,6 @@ class UserManager {
         return stats;
     }
 
-    // Utility methods
     validateEmail(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
@@ -623,7 +565,6 @@ class UserManager {
     }
 
     cleanup() {
-        // Cleanup event listeners if needed
         const userForm = document.getElementById('userForm');
         if (userForm && userForm._listenerAttached) {
             userForm.removeEventListener('submit', this.handleUserSubmit);

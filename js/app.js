@@ -287,39 +287,6 @@ class BusinessDashboard {
         this.ui = null;
     }
 
-
-    // ADD THIS METHOD TO BusinessDashboard class
-    updateSidebarVisibility(userRole) {
-        console.log('🔧 Updating sidebar visibility for role:', userRole);
-
-        // Define which roles can see which items
-        const rolePermissions = {
-            'admin-only': ['admin'],
-            'admin-manager': ['admin', 'manager'],
-            'admin-supervisor': ['admin', 'supervisor', 'manager'] // Allow manager to see supervisor items too
-        };
-
-        // Apply visibility rules
-        Object.entries(rolePermissions).forEach(([className, allowedRoles]) => {
-            const items = document.querySelectorAll(`.${className}`);
-            items.forEach(item => {
-                const shouldShow = allowedRoles.includes(userRole);
-                item.style.display = shouldShow ? 'list-item' : 'none';
-                console.log(`📋 ${className}: ${shouldShow ? 'SHOW' : 'HIDE'}`);
-            });
-        });
-
-        // Always show dashboard, reports, and settings to everyone
-        const alwaysShow = ['dashboard', 'reports', 'settings'];
-        alwaysShow.forEach(section => {
-            const item = document.querySelector(`[data-section="${section}"]`).closest('li');
-            if (item) {
-                item.style.display = 'list-item';
-            }
-        });
-
-        console.log('✅ Sidebar visibility updated for role:', userRole);
-    }
     async initialize() {
         if (this.initializationPromise) {
             return this.initializationPromise;
@@ -363,27 +330,6 @@ class BusinessDashboard {
             console.error('❌ Application initialization failed:', error);
             this.handleInitializationError(error);
             throw error;
-        }
-    }
-
-    initializeUpdateManager() {
-        if (window.electronAPI) {
-            this.updateManager = new UpdateManager(this.ui);
-            this.addUpdateMenuOption();
-            console.log('Electron API methods:', Object.keys(window.electronAPI));
-            console.log('Electron API available:', !!window.electronAPI);
-
-            // Add this line to make update manager globally accessible
-            window.updateManager = this.updateManager;
-        } else {
-            console.log('Running in browser mode - auto-update disabled');
-            // Create a dummy update manager for browser mode
-            this.updateManager = {
-                checkForUpdates: () => {
-                    this.ui.showToast('Auto-update not available in browser mode', 'info');
-                },
-                cleanup: () => { }
-            };
         }
     }
 
@@ -456,15 +402,14 @@ class BusinessDashboard {
                 auth: !!this.auth
             });
 
-            // ✅ INITIALIZE MANAGERS WITH CORRECT NAMES
-            // In initializeBusinessManagers method
+            // ✅ FIXED: INITIALIZE ALL MANAGERS INCLUDING ATTENDANCE
             this.managers = {
                 user: new UserManager(dependencies),
                 employee: new EmployeeManager(dependencies),
-                salary: new SalaryManager(dependencies), // Make sure this exists
+                salary: new SalaryManager(dependencies),
+                attendance: new AttendanceManager(dependencies),
                 billing: new BillingManager(dependencies),
                 customer: new CustomerManager(dependencies),
-                attendance: new AttendanceManager(dependencies),
                 reports: new ReportsManager(dependencies),
                 export: new ExportManager(dependencies),
                 settings: new SettingsManager(dependencies)
@@ -500,49 +445,7 @@ class BusinessDashboard {
         }
     }
 
-    setupSectionListeners() {
-        window.addEventListener('sectionChanged', (event) => {
-            this.loadSectionData(event.detail.section);
-        });
-
-        window.addEventListener('dashboardReady', () => {
-            this.loadInitialData();
-        });
-
-        window.addEventListener('popstate', (event) => {
-            if (event.state && event.state.section) {
-                this.ui.showSection(event.state.section);
-            }
-        });
-    }
-
-    addUpdateMenuOption() {
-        setTimeout(() => {
-            const settingsMenu = document.getElementById('settingsMenu');
-            if (settingsMenu) {
-                const updateOption = document.createElement('button');
-                updateOption.className = 'menu-item';
-                updateOption.innerHTML = '<i class="fas fa-sync-alt"></i> Check for Updates';
-                updateOption.addEventListener('click', () => {
-                    this.updateManager.checkForUpdates();
-                });
-                settingsMenu.appendChild(updateOption);
-            }
-        }, 1000);
-    }
-
-    async loadInitialData() {
-        try {
-            console.log('📊 Loading initial dashboard data...');
-            await this.updateDashboardStats();
-            this.updateOnlineUsers();
-            await this.updateDatabaseStatus();
-            console.log('✅ Initial data loaded');
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-        }
-    }
-
+    // 🆕 **CRITICAL FIX: UPDATED SECTION DATA LOADING**
     async loadSectionData(sectionId) {
         try {
             console.log(`📊 Loading data for section: ${sectionId}`);
@@ -555,104 +458,132 @@ class BusinessDashboard {
                 console.warn('User not authenticated, skipping data load');
                 return;
             }
+
+            // ✅ FIXED: Update sidebar visibility for current user role
             this.updateSidebarVisibility(currentUser.role);
+
             // Check permissions
             if (this.auth.canAccessSection && !this.auth.canAccessSection(sectionId)) {
                 this.ui.showToast('You do not have permission to access this section', 'error');
                 return;
             }
 
-            // ✅ FIXED: Updated manager map with new managers
-            const managerMap = {
-                'dashboard': null,
-                'users': 'user',
-                'employees': 'employee',
-                'salary': 'salary',
-                'attendance': 'attendance',
-                'salary-payments': 'salary', // Use salary manager for salary-payments too
-                'billing': 'billing',
-                'customers': 'customer',
-                'pending': 'billing',
-                'payments': 'billing',
-                'reports': 'reports',
-                'settings': 'settings'
+            // ✅ **FIXED: PROPER SECTION HANDLERS WITH DATA LOADING**
+            const sectionHandlers = {
+                'dashboard': () => this.loadDashboardData(),
+                'users': () => this.managers.user?.loadUsers?.(),
+                'employees': () => this.managers.employee?.loadEmployees?.(),
+                'salary': () => {
+                    const manager = this.managers.salary;
+                    if (manager?.loadSalaryData) return manager.loadSalaryData();
+                    if (manager?.setupSalaryForm) manager.setupSalaryForm();
+                    return Promise.resolve();
+                },
+                'attendance': () => {
+                    const manager = this.managers.attendance;
+                    if (manager?.loadAttendanceSection) return manager.loadAttendanceSection();
+                    if (manager?.loadAttendanceRecords) return manager.loadAttendanceRecords();
+                    return Promise.resolve();
+                },
+                'salary-payments': () => {
+                    const manager = this.managers.salary;
+                    if (manager?.loadSalaryPaymentsData) return manager.loadSalaryPaymentsData();
+                    if (manager?.initializeSalaryPayments) return manager.initializeSalaryPayments();
+                    return Promise.resolve();
+                },
+                'billing': () => this.managers.billing?.loadBills?.(),
+                'customers': () => this.managers.customer?.loadCustomers?.(),
+                'pending': () => this.managers.billing?.loadPendingBills?.(),
+                'payments': () => this.managers.billing?.loadPayments?.(),
+                'reports': () => this.managers.reports?.loadReports?.(),
+                'settings': () => this.loadSettings()
             };
 
-            const managerName = managerMap[sectionId];
+            const handler = sectionHandlers[sectionId];
 
-            // Handle dashboard separately
-            if (sectionId === 'dashboard') {
-                await this.loadDashboardData();
-                return;
+            if (handler) {
+                console.log(`🎯 Executing handler for: ${sectionId}`);
+                await handler();
+                console.log(`✅ Data loaded for: ${sectionId}`);
+            } else {
+                console.warn(`❌ No handler found for section: ${sectionId}`);
             }
 
-            if (!managerName || !this.managers[managerName]) {
-                console.warn(`Manager not available for section: ${sectionId}`);
-                this.ui.showToast(`${sectionId} functionality not available`, 'warning');
-                return;
-            }
-
-            const manager = this.managers[managerName];
-
-            switch (sectionId) {
-                case 'users':
-                    await manager.loadUsers();
-                    break;
-                case 'employees':
-                    await manager.loadEmployees();
-                    break;
-                case 'salary':
-                    if (manager.setupSalaryForm) {
-                        manager.setupSalaryForm();
-                    }
-                    await manager.loadSalaryData();
-                    break;
-                case 'attendance':
-                    if (manager.loadAttendanceRecords) {
-                        await manager.loadAttendanceRecords();
-                    }
-                    break;
-                case 'billing':
-                    await manager.loadBills();
-                    break;
-                case 'customers':
-                    await manager.loadCustomers();
-                    break;
-                case 'pending':
-                    await manager.loadPendingBills();
-                    break;
-                case 'payments':
-                    await manager.loadPayments();
-                    break;
-                case 'reports':
-                    await manager.loadReports();
-                    break;
-                case 'settings':
-                    try {
-                        console.log('⚙️ Loading settings section...');
-                        await this.loadSettings();
-
-                        if (this.managers.settings) {
-                            if (typeof this.managers.settings.loadSettings === 'function') {
-                                await this.managers.settings.loadSettings();
-                            }
-                            if (typeof this.managers.settings.setupSettingsForms === 'function') {
-                                this.managers.settings.setupSettingsForms();
-                            }
-                        }
-                        console.log('✅ Settings section loaded successfully');
-                    } catch (error) {
-                        console.error('Error in settings section:', error);
-                        this.ui.showToast('Error loading settings', 'error');
-                    }
-                    break;
-                default:
-                    console.warn(`Unknown section: ${sectionId}`);
-            }
         } catch (error) {
-            console.error(`Error loading data for ${sectionId}:`, error);
+            console.error(`❌ Error loading data for ${sectionId}:`, error);
             this.ui.showToast(`Error loading ${sectionId} data`, 'error');
         }
+    }
+
+    // 🆕 **FIXED SECTION LISTENERS**
+    setupSectionListeners() {
+        console.log('🔗 Setting up section listeners...');
+
+        // Listen for section changes from the UI
+        document.addEventListener('sectionChanged', (event) => {
+            console.log('🎯 Section changed event:', event.detail.section);
+            this.loadSectionData(event.detail.section);
+        });
+
+        // Listen for manual section clicks
+        document.addEventListener('click', (e) => {
+            const navLink = e.target.closest('.nav-link');
+            if (navLink && navLink.dataset.section) {
+                const sectionId = navLink.dataset.section;
+                console.log('🖱️ Nav link clicked:', sectionId);
+                setTimeout(() => {
+                    this.loadSectionData(sectionId);
+                }, 100);
+            }
+        });
+
+        window.addEventListener('dashboardReady', () => {
+            this.loadInitialData();
+        });
+
+        window.addEventListener('popstate', (event) => {
+            if (event.state && event.state.section) {
+                this.ui.showSection(event.state.section);
+                setTimeout(() => {
+                    this.loadSectionData(event.state.section);
+                }, 100);
+            }
+        });
+
+        console.log('✅ Section listeners setup complete');
+    }
+
+    // 🆕 **ADD THIS METHOD: Update Sidebar Visibility**
+    updateSidebarVisibility(userRole) {
+        console.log('🔧 Updating sidebar visibility for role:', userRole);
+
+        // Define which roles can see which items
+        const rolePermissions = {
+            'admin-only': ['admin'],
+            'admin-manager': ['admin', 'manager'],
+            'admin-supervisor': ['admin', 'supervisor', 'manager']
+        };
+
+        // Apply visibility rules
+        Object.entries(rolePermissions).forEach(([className, allowedRoles]) => {
+            const items = document.querySelectorAll(`.${className}`);
+            items.forEach(item => {
+                const shouldShow = allowedRoles.includes(userRole);
+                item.style.display = shouldShow ? 'list-item' : 'none';
+                console.log(`📋 ${className}: ${shouldShow ? 'SHOW' : 'HIDE'}`);
+            });
+        });
+
+        // Always show dashboard, reports, and settings to everyone
+        const alwaysShow = ['dashboard', 'reports', 'settings'];
+        alwaysShow.forEach(section => {
+            const item = document.querySelector(`[data-section="${section}"]`)?.closest('li');
+            if (item) {
+                item.style.display = 'list-item';
+            }
+        });
+
+        console.log('✅ Sidebar visibility updated for role:', userRole);
     }
 
     async loadDashboardData() {
@@ -676,24 +607,61 @@ class BusinessDashboard {
             const totalEmployees = employees.length;
 
             // Update dashboard cards
-            const totalBalanceEl = document.getElementById('totalBalance');
-            const gstAmountEl = document.getElementById('gstAmount');
-            const recentActivityEl = document.getElementById('recentActivity');
-            const pendingPaymentsEl = document.getElementById('pendingPayments');
-            const totalCustomersEl = document.getElementById('totalCustomers');
-            const totalEmployeesEl = document.getElementById('totalEmployees');
+            const elements = {
+                'totalBalance': this.formatCurrency(totalSales),
+                'gstAmount': this.formatCurrency(totalGST),
+                'recentActivity': this.formatNumber(totalBills),
+                'pendingPayments': this.formatNumber(pendingBills),
+                'totalCustomers': this.formatNumber(totalCustomers),
+                'totalEmployees': this.formatNumber(totalEmployees)
+            };
 
-            if (totalBalanceEl) totalBalanceEl.textContent = Utils.formatCurrency(totalSales);
-            if (gstAmountEl) gstAmountEl.textContent = Utils.formatCurrency(totalGST);
-            if (recentActivityEl) recentActivityEl.textContent = totalBills;
-            if (pendingPaymentsEl) pendingPaymentsEl.textContent = pendingBills;
-            if (totalCustomersEl) totalCustomersEl.textContent = totalCustomers;
-            if (totalEmployeesEl) totalEmployeesEl.textContent = totalEmployees;
+            Object.entries(elements).forEach(([id, value]) => {
+                const element = document.getElementById(id);
+                if (element) element.textContent = value;
+            });
 
             console.log('✅ Dashboard data loaded successfully');
         } catch (error) {
             console.error('Error loading dashboard data:', error);
             this.ui.showToast('Error loading dashboard data', 'error');
+        }
+    }
+
+    async loadSettings() {
+        try {
+            console.log('⚙️ Loading settings...');
+
+            // Load current user data for settings
+            const currentUser = this.auth.getCurrentUser();
+            if (currentUser) {
+                const settingsAvatar = document.getElementById('settingsAvatar');
+                const userName = document.getElementById('userName');
+
+                if (settingsAvatar) {
+                    settingsAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff`;
+                }
+                if (userName) {
+                    userName.textContent = currentUser.name;
+                }
+            }
+
+            console.log('✅ Settings loaded successfully');
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            this.ui.showToast('Error loading settings', 'error');
+        }
+    }
+
+    async loadInitialData() {
+        try {
+            console.log('📊 Loading initial dashboard data...');
+            await this.updateDashboardStats();
+            this.updateOnlineUsers();
+            await this.updateDatabaseStatus();
+            console.log('✅ Initial data loaded');
+        } catch (error) {
+            console.error('Error loading initial data:', error);
         }
     }
 
@@ -750,60 +718,41 @@ class BusinessDashboard {
         }
     }
 
-    async loadSettings() {
-        try {
-            console.log('⚙️ Loading settings...');
-
-            // Load current user data for settings
-            const currentUser = this.auth.getCurrentUser();
-            if (currentUser) {
-                const settingsAvatar = document.getElementById('settingsAvatar');
-                const userName = document.getElementById('userName');
-
-                if (settingsAvatar) {
-                    settingsAvatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff`;
-                }
-                if (userName) {
-                    userName.textContent = currentUser.name;
-                }
-            }
-
-            // Setup theme selector
-            this.setupThemeSelector();
-
-            console.log('✅ Settings loaded successfully');
-        } catch (error) {
-            console.error('Error loading settings:', error);
-            this.ui.showToast('Error loading settings', 'error');
+    initializeUpdateManager() {
+        if (window.electronAPI) {
+            this.updateManager = new UpdateManager(this.ui);
+            this.addUpdateMenuOption();
+        } else {
+            console.log('Running in browser mode - auto-update disabled');
+            this.updateManager = {
+                checkForUpdates: () => {
+                    this.ui.showToast('Auto-update not available in browser mode', 'info');
+                },
+                cleanup: () => { }
+            };
         }
     }
 
-    setupThemeSelector() {
-        const themeOptions = document.querySelectorAll('.theme-option');
-        themeOptions.forEach(option => {
-            option.addEventListener('click', () => {
-                const theme = option.dataset.theme;
-                themeOptions.forEach(opt => opt.classList.remove('active'));
-                option.classList.add('active');
-
-                if (window.themeManager) {
-                    window.themeManager.setTheme(theme);
-                }
-            });
-        });
+    addUpdateMenuOption() {
+        setTimeout(() => {
+            const settingsMenu = document.getElementById('settingsMenu');
+            if (settingsMenu) {
+                const updateOption = document.createElement('button');
+                updateOption.className = 'menu-item';
+                updateOption.innerHTML = '<i class="fas fa-sync-alt"></i> Check for Updates';
+                updateOption.addEventListener('click', () => {
+                    this.updateManager.checkForUpdates();
+                });
+                settingsMenu.appendChild(updateOption);
+            }
+        }, 1000);
     }
 
     async finalizeInitialization() {
         console.log('🎯 Finalizing initialization...');
         this.setupErrorHandling();
         this.setupCleanup();
-        const currentUser = this.auth.getCurrentUser();
-        if (currentUser) {
-            this.updateSidebarVisibility(currentUser.role);
-        }
 
-        this.setupErrorHandling();
-        this.setupCleanup();
         // Initialize from saved state
         if (this.ui && typeof this.ui.initializeFromSavedState === 'function') {
             this.ui.initializeFromSavedState();
@@ -828,14 +777,6 @@ class BusinessDashboard {
             }
             e.preventDefault();
         });
-
-        // Global error handler
-        window.handleGlobalError = (error) => {
-            console.error('Global error handler:', error);
-            if (this.ui) {
-                this.ui.showToast('An error occurred', 'error');
-            }
-        };
     }
 
     setupCleanup() {
@@ -903,6 +844,24 @@ class BusinessDashboard {
         }
     }
 
+    // Utility methods
+    formatCurrency(amount) {
+        if (typeof amount !== 'number') {
+            amount = parseFloat(amount) || 0;
+        }
+        return '₹' + amount.toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    formatNumber(number) {
+        if (typeof number !== 'number') {
+            number = parseInt(number) || 0;
+        }
+        return number.toLocaleString('en-IN');
+    }
+
     // Manager access methods
     getManagers() {
         return this.managers;
@@ -912,7 +871,6 @@ class BusinessDashboard {
         return this.managers[name];
     }
 
-    // Utility methods
     isReady() {
         return this.isInitialized;
     }
@@ -924,139 +882,6 @@ class BusinessDashboard {
             managers: Object.keys(this.managers),
             database: this.db?.isOnline ? 'Online' : 'Offline'
         };
-    }
-
-    // Data sanitization methods
-    sanitizeDataForTable(table, data) {
-        const sanitized = { ...data };
-
-        switch (table) {
-            case 'users':
-                const userFields = ['id', 'username', 'password', 'name', 'email', 'phone', 'role', 'status', 'created_at', 'updated_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!userFields.includes(key)) delete sanitized[key];
-                });
-                break;
-
-            case 'employees':
-                const employeeFields = ['id', 'name', 'phone', 'email', 'employee_type', 'vehicle_number', 'role', 'salary', 'join_date', 'created_at', 'updated_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!employeeFields.includes(key)) delete sanitized[key];
-                });
-                break;
-
-            case 'bills':
-                const billFields = ['id', 'bill_number', 'bill_date', 'customer_name', 'customer_phone', 'customer_email', 'items', 'sub_total', 'gst_rate', 'gst_amount', 'total_amount', 'status', 'created_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!billFields.includes(key)) delete sanitized[key];
-                });
-                break;
-
-            case 'customers':
-                const customerFields = ['id', 'name', 'phone', 'email', 'address', 'total_bills', 'total_amount', 'created_at'];
-                Object.keys(sanitized).forEach(key => {
-                    if (!customerFields.includes(key)) delete sanitized[key];
-                });
-                break;
-        }
-
-        return sanitized;
-    }
-
-    // Export functionality
-    async exportData(type, format = 'excel') {
-        try {
-            let data = [];
-            let filename = '';
-            let title = '';
-
-            switch (type) {
-                case 'users':
-                    data = await this.db.getUsers();
-                    filename = 'users_export';
-                    title = 'Users Export';
-                    break;
-                case 'employees':
-                    data = await this.db.getEmployees();
-                    filename = 'employees_export';
-                    title = 'Employees Export';
-                    break;
-                case 'bills':
-                    data = await this.db.getBills();
-                    filename = 'bills_export';
-                    title = 'Bills Export';
-                    break;
-                case 'customers':
-                    data = await this.db.getCustomers();
-                    filename = 'customers_export';
-                    title = 'Customers Export';
-                    break;
-                case 'payments':
-                    data = await this.db.getPayments();
-                    filename = 'payments_export';
-                    title = 'Payments Export';
-                    break;
-                default:
-                    throw new Error(`Unknown export type: ${type}`);
-            }
-
-            if (data.length === 0) {
-                this.ui.showToast(`No ${type} data to export`, 'warning');
-                return;
-            }
-
-            // Use export manager if available
-            if (window.exportManager && format === 'excel') {
-                await window.exportManager.exportToExcel(data, filename, title);
-            } else if (window.exportManager && format === 'pdf') {
-                await window.exportManager.exportToPDF(data, filename, title);
-            } else {
-                // Fallback to Utils
-                Utils.exportToExcel(data, filename);
-            }
-
-            this.ui.showToast(`${type} exported successfully`, 'success');
-        } catch (error) {
-            console.error(`Error exporting ${type}:`, error);
-            this.ui.showToast(`Error exporting ${type}: ${error.message}`, 'error');
-        }
-    }
-
-    // Backup functionality
-    async backupAllData() {
-        try {
-            this.ui.showExportProgress('Creating backup...');
-
-            const allData = await this.db.exportAllData();
-
-            if (window.electronAPI && window.electronAPI.exportAllData) {
-                const result = await window.electronAPI.exportAllData(allData);
-                if (result.success) {
-                    this.ui.showToast(`Backup created successfully: ${result.filePath}`, 'success');
-                } else {
-                    throw new Error(result.error);
-                }
-            } else {
-                // Browser fallback - download as JSON
-                const dataStr = JSON.stringify(allData, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `business_backup_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-
-                this.ui.showToast('Backup downloaded successfully', 'success');
-            }
-        } catch (error) {
-            console.error('Error creating backup:', error);
-            this.ui.showToast('Error creating backup: ' + error.message, 'error');
-        } finally {
-            this.ui.hideExportProgress();
-        }
     }
 
     // Static method to get instance

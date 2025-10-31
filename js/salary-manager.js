@@ -1,11 +1,11 @@
 class SalaryManager {
     constructor(dependencies) {
         if (!dependencies) throw new Error('SalaryManager: dependencies required');
-        
+
         this.db = dependencies.db;
         this.ui = dependencies.ui;
         this.auth = dependencies.auth;
-        
+
         // All data properties
         this.dailyEmployees = [];
         this.salaryRecords = [];
@@ -14,7 +14,7 @@ class SalaryManager {
         this.salaryPayments = [];
         this.currentDate = new Date().toISOString().split('T')[0];
         this.currentDateFilter = 'all';
-        
+
         this.setupEventListeners();
     }
 
@@ -38,7 +38,7 @@ class SalaryManager {
             // Load all necessary data
             await this.loadDailyEmployees();
             await this.loadAttendanceRecords();
-            
+
             this.salaryRecords = await this.db.getSalaryRecords() || [];
             this.advanceRecords = await this.db.getAdvanceRecords() || [];
             this.salaryPayments = await this.db.getSalaryPayments() || [];
@@ -60,7 +60,7 @@ class SalaryManager {
     async loadDailyEmployees() {
         try {
             const allEmployees = await this.db.getEmployees();
-            this.dailyEmployees = allEmployees.filter(emp => 
+            this.dailyEmployees = allEmployees.filter(emp =>
                 emp.salary_type === 'daily' || !emp.salary_type
             );
         } catch (error) {
@@ -84,6 +84,320 @@ class SalaryManager {
         } catch (error) {
             console.error('Error loading salary payments:', error);
             this.salaryPayments = [];
+        }
+    }
+
+    /**
+         * Initialize salary payments section - CRITICAL MISSING METHOD
+         */
+    async initializeSalaryPayments() {
+        try {
+            console.log('💰 Initializing salary payments section...');
+
+            await this.loadSalaryPayments();
+            await this.loadSalaryPaymentsTable();
+            this.setupSalaryPaymentsEventListeners();
+
+            console.log('✅ Salary payments initialized successfully');
+        } catch (error) {
+            console.error('❌ Error initializing salary payments:', error);
+            this.ui.showToast('Error loading salary payments', 'error');
+        }
+    }
+
+    /**
+     * Load and render salary payments table - CRITICAL MISSING METHOD
+     */
+    async loadSalaryPaymentsTable() {
+        try {
+            const tbody = document.getElementById('salaryPaymentsTableBody');
+            if (!tbody) {
+                console.warn('❌ Salary payments table body not found');
+                return;
+            }
+
+            if (this.salaryPayments.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="11" class="no-data">
+                            <i class="fas fa-money-check"></i>
+                            <br>No salary payments recorded
+                            <br><small>Process salary payments to see records here</small>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = this.salaryPayments.map(payment => {
+                const statusClass = payment.status === 'paid' ? 'status-paid' : 'status-pending';
+                const payslipBtn = payment.payslip_generated ?
+                    '<span class="badge success"><i class="fas fa-check"></i> Generated</span>' :
+                    `<button class="btn-primary btn-sm generate-payslip-btn" 
+                            data-payment-id="${payment.id}"
+                            title="Generate Payslip">
+                        <i class="fas fa-file-pdf"></i>
+                    </button>`;
+
+                return `
+                    <tr class="salary-payment-record">
+                        <td><strong>${payment.id}</strong></td>
+                        <td>${Utils.formatDate(payment.payment_date)}</td>
+                        <td>
+                            <div class="employee-info">
+                                <strong>${payment.employee_name}</strong>
+                                <small>${payment.employee_id}</small>
+                            </div>
+                        </td>
+                        <td>
+                            ${Utils.formatDate(payment.pay_period_start)} 
+                            <br>to<br>
+                            ${Utils.formatDate(payment.pay_period_end)}
+                        </td>
+                        <td>${Utils.formatCurrency(payment.basic_salary)}</td>
+                        <td>${Utils.formatCurrency(payment.overtime_amount)}</td>
+                        <td class="text-danger">-${Utils.formatCurrency(payment.advance_deductions)}</td>
+                        <td class="text-success"><strong>${Utils.formatCurrency(payment.net_salary)}</strong></td>
+                        <td>
+                            <span class="payment-method ${payment.payment_method}">
+                                ${payment.payment_method}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="status-badge ${statusClass}">
+                                ${payment.status}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                ${payslipBtn}
+                                <button class="btn-secondary btn-sm" 
+                                        onclick="app.getManagers().salary.viewPaymentDetails('${payment.id}')"
+                                        title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Update summary cards
+            this.updateSalaryPaymentsSummary();
+
+        } catch (error) {
+            console.error('Error loading salary payments table:', error);
+            this.ui.showToast('Error loading salary payments table', 'error');
+        }
+    }
+
+    /**
+     * Setup event listeners for salary payments - CRITICAL MISSING METHOD
+     */
+    setupSalaryPaymentsEventListeners() {
+        console.log('🔧 Setting up salary payments event listeners...');
+
+        // Process salary payment button
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'processSalaryBtn' || e.target.closest('#processSalaryBtn')) {
+                this.showProcessSalaryModal();
+                return;
+            }
+
+            if (e.target.id === 'exportSalaryPaymentsBtn' || e.target.closest('#exportSalaryPaymentsBtn')) {
+                this.exportSalaryPayments();
+                return;
+            }
+
+            // Generate payslip buttons
+            if (e.target.classList.contains('generate-payslip-btn') || e.target.closest('.generate-payslip-btn')) {
+                const button = e.target.classList.contains('generate-payslip-btn') ?
+                    e.target : e.target.closest('.generate-payslip-btn');
+                const paymentId = button.getAttribute('data-payment-id');
+                if (paymentId) {
+                    this.generatePayslip(paymentId);
+                }
+                return;
+            }
+        });
+    }
+
+    /**
+     * Update salary payments summary cards - CRITICAL MISSING METHOD
+     */
+    updateSalaryPaymentsSummary() {
+        const processedCount = this.salaryPayments.length;
+        const totalPaid = this.salaryPayments.reduce((sum, payment) =>
+            sum + parseFloat(payment.net_salary || 0), 0);
+        const payslipsGenerated = this.salaryPayments.filter(p => p.payslip_generated).length;
+
+        // Update DOM elements if they exist
+        const processedEl = document.getElementById('processedPaymentsCount');
+        const totalPaidEl = document.getElementById('totalSalaryPaid');
+        const payslipsEl = document.getElementById('payslipsGenerated');
+
+        if (processedEl) processedEl.textContent = processedCount;
+        if (totalPaidEl) totalPaidEl.textContent = Utils.formatCurrency(totalPaid);
+        if (payslipsEl) payslipsEl.textContent = payslipsGenerated;
+    }
+
+
+    /**
+     * View payment details - CRITICAL MISSING METHOD
+     */
+    async viewPaymentDetails(paymentId) {
+        const payment = this.salaryPayments.find(p => p.id === paymentId);
+        if (!payment) {
+            this.ui.showToast('Payment not found', 'error');
+            return;
+        }
+
+        const employee = this.dailyEmployees.find(emp => emp.id === payment.employee_id);
+
+        const modalHtml = `
+            <div id="paymentDetailsModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-receipt"></i> Payment Details</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    <div class="payment-details">
+                        <div class="detail-section">
+                            <h4>Employee Information</h4>
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <label>Employee Name:</label>
+                                    <span>${employee?.name || payment.employee_name}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Employee ID:</label>
+                                    <span>${payment.employee_id}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Department:</label>
+                                    <span>${employee?.role || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="detail-section">
+                            <h4>Payment Information</h4>
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <label>Payment ID:</label>
+                                    <span>${payment.id}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Payment Date:</label>
+                                    <span>${Utils.formatDate(payment.payment_date)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Payment Method:</label>
+                                    <span class="payment-method ${payment.payment_method}">${payment.payment_method}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Status:</label>
+                                    <span class="status-badge ${payment.status}">${payment.status}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="detail-section">
+                            <h4>Salary Breakdown</h4>
+                            <div class="salary-breakdown">
+                                <div class="breakdown-item">
+                                    <span>Basic Salary:</span>
+                                    <span>${Utils.formatCurrency(payment.basic_salary)}</span>
+                                </div>
+                                <div class="breakdown-item">
+                                    <span>Overtime Amount:</span>
+                                    <span>${Utils.formatCurrency(payment.overtime_amount)}</span>
+                                </div>
+                                <div class="breakdown-item deduction">
+                                    <span>Advance Deductions:</span>
+                                    <span>-${Utils.formatCurrency(payment.advance_deductions)}</span>
+                                </div>
+                                <div class="breakdown-item total">
+                                    <span>Net Salary:</span>
+                                    <span><strong>${Utils.formatCurrency(payment.net_salary)}</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="detail-section">
+                            <h4>Pay Period</h4>
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <label>Period Start:</label>
+                                    <span>${Utils.formatDate(payment.pay_period_start)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Period End:</label>
+                                    <span>${Utils.formatDate(payment.pay_period_end)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Work Days:</label>
+                                    <span>${payment.work_days || 0}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <label>Total Hours:</label>
+                                    <span>${payment.total_hours || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary modal-cancel">Close</button>
+                        <button type="button" class="btn-primary" onclick="app.getManagers().salary.generatePayslip('${payment.id}')">
+                            <i class="fas fa-file-pdf"></i> Generate Payslip
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'paymentDetailsModal');
+    }
+
+    /**
+     * Export salary payments - CRITICAL MISSING METHOD
+     */
+    async exportSalaryPayments() {
+        try {
+            if (this.salaryPayments.length === 0) {
+                this.ui.showToast('No salary payments to export', 'warning');
+                return;
+            }
+
+            const exportData = this.salaryPayments.map(payment => ({
+                'Payment ID': payment.id,
+                'Payment Date': Utils.formatDate(payment.payment_date),
+                'Employee ID': payment.employee_id,
+                'Employee Name': payment.employee_name,
+                'Pay Period Start': Utils.formatDate(payment.pay_period_start),
+                'Pay Period End': Utils.formatDate(payment.pay_period_end),
+                'Basic Salary': payment.basic_salary,
+                'Overtime Amount': payment.overtime_amount,
+                'Advance Deductions': payment.advance_deductions,
+                'Net Salary': payment.net_salary,
+                'Payment Method': payment.payment_method,
+                'Status': payment.status,
+                'Work Days': payment.work_days,
+                'Total Hours': payment.total_hours
+            }));
+
+            const filename = `salary_payments_${new Date().toISOString().split('T')[0]}`;
+
+            if (window.exportManager) {
+                await window.exportManager.exportToExcel(exportData, filename, 'Salary Payments Report');
+            } else {
+                Utils.exportToExcel(exportData, filename);
+            }
+
+            this.ui.showToast('Salary payments exported successfully', 'success');
+        } catch (error) {
+            console.error('Export error:', error);
+            this.ui.showToast('Export failed', 'error');
         }
     }
 
@@ -127,7 +441,7 @@ class SalaryManager {
 
     getTodaysAttendanceSummary() {
         const today = new Date().toISOString().split('T')[0];
-        const todaysRecords = this.attendanceRecords.filter(record => 
+        const todaysRecords = this.attendanceRecords.filter(record =>
             record.attendance_date === today
         );
 
@@ -146,7 +460,7 @@ class SalaryManager {
         if (salaryForm) {
             salaryForm.addEventListener('submit', (e) => this.handleSalarySubmit(e));
             this.populateEmployeeDropdown();
-            
+
             // Set today's date by default
             const salaryDate = document.getElementById('salaryDate');
             if (salaryDate) salaryDate.value = this.currentDate;
@@ -158,7 +472,7 @@ class SalaryManager {
         if (!employeeSelect) return;
 
         employeeSelect.innerHTML = '<option value="">Select Employee</option>';
-        
+
         this.dailyEmployees.forEach(employee => {
             const summary = this.getEmployeeSummary(employee.id);
             const option = document.createElement('option');
@@ -234,11 +548,11 @@ class SalaryManager {
             }
 
             this.ui.showToast('Record saved successfully', 'success');
-            
+
             // Reset form but keep date
             e.target.reset();
             salaryDate.value = this.currentDate;
-            
+
             // Reload data
             await this.loadSalaryData();
 
@@ -282,8 +596,8 @@ class SalaryManager {
             await this.db.create('salary_payments', payment);
 
             // Mark advances as deducted
-            for (const advance of this.advanceRecords.filter(a => 
-                a.employee_id === paymentData.employee_id && 
+            for (const advance of this.advanceRecords.filter(a =>
+                a.employee_id === paymentData.employee_id &&
                 a.status === 'pending'
             )) {
                 await this.db.update('advance_records', advance.id, {
@@ -397,7 +711,7 @@ class SalaryManager {
         doc.setFontSize(16);
         doc.setFont('helvetica', 'bold');
         doc.text('BUSINESS MANAGER', pageWidth / 2, 15, { align: 'center' });
-        
+
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.text('Salary Payslip', pageWidth / 2, 22, { align: 'center' });
@@ -407,15 +721,15 @@ class SalaryManager {
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.text('Employee Details:', margin, yPosition);
-        
+
         yPosition += 6;
         doc.setFont('helvetica', 'normal');
         doc.text(`Name: ${payslipData.employee.name}`, margin, yPosition);
         doc.text(`ID: ${payslipData.employee.id}`, margin + 70, yPosition);
-        
+
         yPosition += 4;
         doc.text(`Department: ${payslipData.employee.role}`, margin, yPosition);
-        
+
         yPosition += 4;
         doc.text(`Pay Period: ${Utils.formatDate(payslipData.payment.pay_period_start)} to ${Utils.formatDate(payslipData.payment.pay_period_end)}`, margin, yPosition);
         doc.text(`Payment Date: ${Utils.formatDate(payslipData.payment.payment_date)}`, margin + 70, yPosition);
@@ -441,10 +755,10 @@ class SalaryManager {
                 yPosition += 2;
                 doc.line(margin, yPosition - 1, pageWidth - margin, yPosition - 1);
             }
-            
+
             doc.text(label, margin, yPosition);
             doc.text(value, pageWidth - margin, yPosition, { align: 'right' });
-            
+
             yPosition += 5;
             if (isTotal) {
                 doc.setFont('helvetica', 'normal');
@@ -470,6 +784,27 @@ class SalaryManager {
         // Save PDF
         const fileName = `payslip_${payslipData.employee.id}_${payslipData.payment.payment_date}.pdf`;
         doc.save(fileName);
+    }
+
+    /**
+     * Load salary payments section data
+     */
+    async loadSalaryPaymentsData() {
+        try {
+            console.log('💰 Loading salary payments data...');
+            this.ui.showSectionLoading('salaryPaymentsContent', 'Loading salary payments...');
+
+            await this.loadSalaryPayments();
+            await this.loadSalaryPaymentsTable();
+            this.updateSalaryPaymentsSummary();
+
+            this.ui.showToast('Salary payments loaded successfully', 'success');
+        } catch (error) {
+            console.error('Error loading salary payments:', error);
+            this.ui.showToast('Error loading salary payments', 'error');
+        } finally {
+            this.ui.hideSectionLoading('salaryPaymentsContent');
+        }
     }
 
     // ==================== RENDER METHODS ====================
@@ -502,22 +837,22 @@ class SalaryManager {
                     <td colspan="8">
                         <strong>${dateGroup}</strong>
                         <span class="date-total">Total: ${Utils.formatCurrency(
-                            records.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0)
-                        )}</span>
+                records.reduce((sum, record) => sum + parseFloat(record.amount || 0), 0)
+            )}</span>
                     </td>
                 </tr>
                 ${records.map(record => {
-                    const isAdvance = record.type === 'advance';
-                    return `
+                const isAdvance = record.type === 'advance';
+                return `
                         <tr class="${isAdvance ? 'advance-record' : 'salary-record'}">
                             <td class="time-cell">${this.formatTime(record.record_date)}</td>
                             <td><strong>${record.employee_id}</strong></td>
                             <td>${record.employee_name}</td>
                             <td>
-                                ${isAdvance ? 
-                                    '<span class="advance-badge"><i class="fas fa-hand-holding-usd"></i> Advance</span>' : 
-                                    '<span class="salary-badge"><i class="fas fa-money-bill-wave"></i> Salary</span>'
-                                }
+                                ${isAdvance ?
+                        '<span class="advance-badge"><i class="fas fa-hand-holding-usd"></i> Advance</span>' :
+                        '<span class="salary-badge"><i class="fas fa-money-bill-wave"></i> Salary</span>'
+                    }
                             </td>
                             <td>${Utils.formatCurrency(record.amount)}</td>
                             <td>Week ${record.week_number}</td>
@@ -536,7 +871,7 @@ class SalaryManager {
                             </td>
                         </tr>
                     `;
-                }).join('')}
+            }).join('')}
             `;
         }).join('');
     }
@@ -545,7 +880,7 @@ class SalaryManager {
 
     updateSummaryCards() {
         const attendanceSummary = this.getTodaysAttendanceSummary();
-        
+
         // Update attendance summary
         document.getElementById('presentTodayCount').textContent = attendanceSummary.present;
         document.getElementById('absentTodayCount').textContent = attendanceSummary.absent;
@@ -732,13 +1067,13 @@ class SalaryManager {
     formatDateGroup(timestamp) {
         const date = new Date(timestamp);
         const today = new Date();
-        
+
         if (date.toDateString() === today.toDateString()) return 'Today';
-        
+
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-        
+
         return date.toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
@@ -757,7 +1092,7 @@ class SalaryManager {
 
     async deleteRecord(recordId, type) {
         if (!confirm('Delete this record?')) return;
-        
+
         try {
             const tableName = type === 'advance' ? 'advance_records' : 'salary_records';
             await this.db.delete(tableName, recordId);
@@ -875,12 +1210,12 @@ class SalaryManager {
         `;
 
         this.showCustomModal(modalHtml, 'attendanceModal');
-        
+
         document.getElementById('attendanceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const employeeId = document.getElementById('attendanceEmployeeId').value;
             const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
-            
+
             const formData = {
                 employee_id: employeeId,
                 employee_name: employee ? employee.name : 'Unknown',
@@ -890,7 +1225,7 @@ class SalaryManager {
                 check_out_time: document.getElementById('checkOutTime').value,
                 notes: document.getElementById('attendanceNotes').value
             };
-            
+
             await this.markAttendance(formData);
             this.ui.hideModal('attendanceModal');
         });
@@ -968,33 +1303,33 @@ class SalaryManager {
         `;
 
         this.showCustomModal(modalHtml, 'salaryPaymentModal');
-        
+
         document.getElementById('calculateSalaryBtn').addEventListener('click', async () => {
             const employeeId = document.getElementById('salaryEmployeeId').value;
             const periodStart = document.getElementById('payPeriodStart').value;
             const periodEnd = document.getElementById('payPeriodEnd').value;
-            
+
             if (employeeId && periodStart && periodEnd) {
                 try {
                     const calculation = await this.calculateSalary(employeeId, periodStart, periodEnd);
-                    
+
                     document.getElementById('previewBasicSalary').textContent = Utils.formatCurrency(calculation.basic_salary);
                     document.getElementById('previewOvertime').textContent = Utils.formatCurrency(calculation.overtime_amount);
                     document.getElementById('previewAdvances').textContent = `-${Utils.formatCurrency(calculation.advance_deductions)}`;
                     document.getElementById('previewNetSalary').textContent = Utils.formatCurrency(calculation.net_salary);
-                    
+
                     document.getElementById('salaryPreview').style.display = 'block';
                 } catch (error) {
                     this.ui.showToast('Error calculating salary', 'error');
                 }
             }
         });
-        
+
         document.getElementById('salaryPaymentForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const employeeId = document.getElementById('salaryEmployeeId').value;
             const employee = this.dailyEmployees.find(emp => emp.id === employeeId);
-            
+
             const formData = {
                 employee_id: employeeId,
                 employee_name: employee ? employee.name : 'Unknown',
@@ -1003,7 +1338,7 @@ class SalaryManager {
                 payment_date: document.getElementById('paymentDate').value,
                 payment_method: document.getElementById('paymentMethod').value
             };
-            
+
             await this.processSalaryPayment(formData);
             this.ui.hideModal('salaryPaymentModal');
         });

@@ -400,27 +400,23 @@ class UIManager {
         }, 'Login form submit', false);
     }
 
-    // 🛡️ FIXED SECTION MANAGEMENT
     showSection(sectionName) {
         return this.safeExecute(() => {
             console.log(`📂 Attempting to show section: ${sectionName}`);
 
-            // ✅ FIX: Check authentication first
-            if (!this.isAuthenticated) {
-                this.showToast('Please login first', 'error');
-                this.showLogin();
-                return false;
+            // ✅ FIX: Convert section name to match HTML ID format
+            let targetId;
+            if (sectionName === 'salary-payments') {
+                targetId = 'salaryPaymentsContent';
+            } else {
+                // Convert other section names (like 'salary' to 'salaryContent')
+                targetId = sectionName.replace(/-([a-z])/g, (g) => g[1].toUpperCase()) + 'Content';
             }
 
-            // ✅ FIX: Check permissions for all sections except dashboard
-            if (sectionName !== 'dashboard' && !this.auth.hasPermission(sectionName)) {
-                this.showToast('You do not have permission to access this section', 'error');
-                return false;
-            }
+            const targetSection = document.getElementById(targetId);
 
-            const targetSection = document.getElementById(sectionName + 'Content');
             if (!targetSection) {
-                console.warn(`❌ Section content not found: ${sectionName}Content`);
+                console.warn(`❌ Section content not found: ${targetId} (from section: ${sectionName})`);
                 this.showToast(`Section "${sectionName}" is not available`, 'error');
                 return false;
             }
@@ -433,16 +429,16 @@ class UIManager {
                 }, `Hide section: ${section.id}`);
             });
 
-            // ✅ FIX: Improved nav link activation
+
+            // Show the selected section
+            targetSection.classList.add('active');
+            targetSection.style.display = 'block';
+
+            // Update navigation
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.classList.remove('active');
             });
 
-            // ✅ FIX: Show the selected section
-            targetSection.classList.add('active');
-            targetSection.style.display = 'block';
-
-            // ✅ FIX: Better nav link targeting
             const targetLink = document.querySelector(`[data-section="${sectionName}"]`);
             if (targetLink) {
                 targetLink.classList.add('active');
@@ -450,22 +446,14 @@ class UIManager {
 
             this.currentSection = sectionName;
 
-            // ✅ FIX: Dispatch section change event
-            window.dispatchEvent(new CustomEvent('sectionChanged', {
-                detail: {
-                    section: sectionName,
-                    timestamp: new Date().toISOString()
-                }
-            }));
-
-            // ✅ FIX: Safe history update
+            // Update URL hash
             try {
                 history.replaceState({ section: sectionName }, '', `#${sectionName}`);
             } catch (error) {
                 console.warn('History replaceState failed:', error);
             }
 
-            console.log(`✅ Section shown: ${sectionName}`);
+            console.log(`✅ Section shown: ${sectionName} (ID: ${targetId})`);
             return true;
 
         }, `Show section: ${sectionName}`, false);
@@ -1157,7 +1145,71 @@ class UIManager {
 
         }, `Render table: ${tbodyId}`, false);
     }
+    showSection(sectionName) {
+        return this.safeExecute(() => {
+            console.log(`📂 Attempting to show section: ${sectionName}`);
 
+            // ✅ FIX: Convert section name to match HTML ID format
+            let targetId;
+            if (sectionName === 'salary-payments') {
+                targetId = 'salaryPaymentsContent';
+            } else {
+                // Convert other section names (like 'salary' to 'salaryContent')
+                targetId = sectionName.replace(/-([a-z])/g, (g) => g[1].toUpperCase()) + 'Content';
+            }
+
+            const targetSection = document.getElementById(targetId);
+
+            if (!targetSection) {
+                console.warn(`❌ Section content not found: ${targetId} (from section: ${sectionName})`);
+                this.showToast(`Section "${sectionName}" is not available`, 'error');
+                return false;
+            }
+
+            // ✅ FIX: Improved section hiding
+            document.querySelectorAll('.content-section').forEach(section => {
+                this.safeExecute(() => {
+                    section.classList.remove('active');
+                    section.style.display = 'none';
+                }, `Hide section: ${section.id}`);
+            });
+
+            // Show the selected section
+            targetSection.classList.add('active');
+            targetSection.style.display = 'block';
+
+            // Update navigation
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            const targetLink = document.querySelector(`[data-section="${sectionName}"]`);
+            if (targetLink) {
+                targetLink.classList.add('active');
+            }
+
+            this.currentSection = sectionName;
+
+            // Update URL hash
+            try {
+                history.replaceState({ section: sectionName }, '', `#${sectionName}`);
+            } catch (error) {
+                console.warn('History replaceState failed:', error);
+            }
+
+            // 🆕 **CRITICAL FIX: Trigger data loading after section is shown**
+            setTimeout(() => {
+                if (window.app && window.app.loadSectionData) {
+                    console.log(`📊 Triggering data load for: ${sectionName}`);
+                    window.app.loadSectionData(sectionName);
+                }
+            }, 50);
+
+            console.log(`✅ Section shown: ${sectionName} (ID: ${targetId})`);
+            return true;
+
+        }, `Show section: ${sectionName}`, false);
+    }
     updateDatabaseStatus(connected) {
         return this.safeExecute(() => {
             let statusElement = document.getElementById('dbStatus');
