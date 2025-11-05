@@ -11,185 +11,129 @@ class UserManager {
         this.users = [];
         this.isInitialized = false;
 
-        console.log('✅ UserManager initialized');
+        console.log('✅ UserManager created');
     }
 
     async initialize() {
+        if (this.isInitialized) return;
+        
         try {
             console.log('🔄 Initializing UserManager...');
             await this.loadUsers();
             this.setupEventListeners();
-            console.log('✅ UserManager initialization complete');
+            this.isInitialized = true;
+            console.log('✅ UserManager initialized');
         } catch (error) {
             console.error('❌ UserManager initialization failed:', error);
+            throw error;
         }
-        return Promise.resolve();
     }
 
     async loadUsers() {
         try {
             console.log('👥 Loading users...');
-            this.ui.showSectionLoading('usersContent', 'Loading users...');
+            this.showSectionLoading('Loading users...');
 
             this.users = await this.db.getUsers() || [];
-            console.log('✅ Users loaded:', this.users.length);
+            console.log(`✅ Loaded ${this.users.length} users`);
 
-            this.renderUsersTable(this.users);
-            this.ui.showToast('Users loaded successfully', 'success');
+            this.renderUsersTable();
+            this.showToast('Users loaded successfully', 'success');
 
         } catch (error) {
             console.error('❌ Error loading users:', error);
-            this.ui.showToast('Error loading users: ' + error.message, 'error');
+            this.showToast('Error loading users: ' + error.message, 'error');
             this.users = [];
-            this.renderUsersTable([]);
+            this.renderUsersTable();
         } finally {
-            this.ui.hideSectionLoading('usersContent');
+            this.hideSectionLoading();
         }
     }
 
     setupEventListeners() {
         console.log('🔧 Setting up UserManager event listeners...');
 
+        // Clean up existing listeners first
         this.cleanup();
 
+        // Add User Button
         document.addEventListener('click', (e) => {
             if (e.target.id === 'addUserBtn' || e.target.closest('#addUserBtn')) {
                 e.preventDefault();
-                e.stopPropagation();
-                console.log('🎯 Add User button clicked');
                 this.showAddUserModal();
             }
 
-            // In UserManager setupEventListeners method
+            // Export Users Button
             if (e.target.id === 'exportUsersBtn' || e.target.closest('#exportUsersBtn')) {
                 e.preventDefault();
-                e.stopPropagation();
-                this.showExportOptions(); // Changed from this.exportUsers()
+                this.showExportOptions();
             }
         });
 
-        class PasswordToggle {
-            static init() {
-                console.log('🔧 Initializing PasswordToggle...');
-
-                document.addEventListener('click', (e) => {
-                    if (e.target.closest('.password-toggle')) {
-                        PasswordToggle.handleToggle(e.target.closest('.password-toggle'));
-                    }
-                });
-
-                document.querySelectorAll('.password-toggle').forEach(toggle => {
-                    toggle.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        PasswordToggle.handleToggle(toggle);
-                    });
-                });
-
-                console.log('✅ PasswordToggle initialized');
-            }
-
-            static handleToggle(toggle) {
-                console.log('👁️ Handling password toggle...');
-
-                const container = toggle.closest('.password-input-container');
-                if (!container) {
-                    console.error('❌ Container not found');
-                    return;
-                }
-
-                const input = container.querySelector('input');
-                const icon = toggle.querySelector('i');
-
-                if (!input || !icon) {
-                    console.error('❌ Input or icon not found');
-                    return;
-                }
-
-                if (input.type === 'password') {
-                    input.type = 'text';
-                    icon.className = 'fas fa-eye-slash';
-                    console.log('✅ Password shown');
-                } else {
-                    input.type = 'password';
-                    icon.className = 'fas fa-eye';
-                    console.log('✅ Password hidden');
-                }
-            }
-        }
-
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => PasswordToggle.init());
-        } else {
-            PasswordToggle.init();
-        }
-
+        // User Form Submission
         const userForm = document.getElementById('userForm');
         if (userForm) {
-            userForm.removeEventListener('submit', this.handleUserSubmit);
             userForm.addEventListener('submit', (e) => this.handleUserSubmit(e));
+            userForm._listenerAttached = true;
         }
 
+        // User Search
         const userSearch = document.getElementById('userSearch');
         if (userSearch) {
-            userSearch.removeEventListener('input', this.searchUsers);
             userSearch.addEventListener('input', (e) => this.searchUsers(e.target.value));
+            userSearch._listenerAttached = true;
         }
+
+        // Password toggle
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.password-toggle')) {
+                this.togglePasswordVisibility(e.target.closest('.password-toggle'));
+            }
+        });
 
         console.log('✅ UserManager event listeners setup complete');
     }
 
     showAddUserModal() {
-        console.log('🔄 Checking permissions for adding user...');
-
         if (!this.auth.hasPermission('admin')) {
-            this.ui.showToast('Insufficient permissions to create users', 'error');
+            this.showToast('Insufficient permissions to create users', 'error');
             return;
         }
 
-        this.ui.showModal('userModal');
-
+        this.showModal('userModal');
+        
+        // Reset form
         setTimeout(() => {
-            this.safeExecute(() => {
-                const modalTitle = document.getElementById('userModalTitle');
-                const userForm = document.getElementById('userForm');
-                const editUserId = document.getElementById('editUserId');
-                const userStatus = document.getElementById('userStatus');
-                const userRole = document.getElementById('userRole');
-                const userPassword = document.getElementById('userPassword');
-                const userConfirmPassword = document.getElementById('userConfirmPassword');
+            const form = document.getElementById('userForm');
+            const title = document.getElementById('userModalTitle');
+            const userId = document.getElementById('editUserId');
 
-                if (modalTitle) modalTitle.textContent = 'Add User';
-                if (userForm) userForm.reset();
-                if (editUserId) editUserId.value = '';
-                if (userStatus) userStatus.value = 'active';
-                if (userRole) userRole.value = 'user';
+            if (title) title.textContent = 'Add User';
+            if (userId) userId.value = '';
+            if (form) form.reset();
 
-                if (userPassword) userPassword.value = '';
-                if (userConfirmPassword) userConfirmPassword.value = '';
+            // Set default values
+            const status = document.getElementById('userStatus');
+            const role = document.getElementById('userRole');
+            if (status) status.value = 'active';
+            if (role) role.value = 'user';
 
-                console.log('✅ Add user modal fully initialized');
-            });
-        }, 50);
+            // Clear password placeholders
+            const password = document.getElementById('userPassword');
+            const confirmPassword = document.getElementById('userConfirmPassword');
+            if (password) password.placeholder = 'Enter password';
+            if (confirmPassword) confirmPassword.placeholder = 'Confirm password';
+        }, 100);
     }
 
-    safeExecute(operation, context = 'operation') {
-        try {
-            return operation();
-        } catch (error) {
-            console.error(`❌ ${context} failed:`, error);
-            return null;
-        }
-    }
-
-    renderUsersTable(users) {
+    renderUsersTable() {
         const tbody = document.getElementById('usersTableBody');
         if (!tbody) {
-            console.error('Users table body not found');
+            console.error('❌ Users table body not found');
             return;
         }
 
-        if (users.length === 0) {
+        if (this.users.length === 0) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="7" class="no-data">
@@ -203,7 +147,7 @@ class UserManager {
 
         const currentUser = this.auth.getCurrentUser();
 
-        tbody.innerHTML = users.map(user => `
+        tbody.innerHTML = this.users.map(user => `
             <tr>
                 <td>
                     <div class="user-avatar-cell">
@@ -243,36 +187,18 @@ class UserManager {
         `).join('');
     }
 
-    formatRoleName(role) {
-        const roleNames = {
-            'admin': 'Administrator',
-            'manager': 'Manager',
-            'supervisor': 'Supervisor',
-            'user': 'User'
-        };
-        return roleNames[role] || role;
-    }
-
-    formatDate(dateString) {
-        if (!dateString) return 'N/A';
-        try {
-            return new Date(dateString).toLocaleDateString();
-        } catch (e) {
-            return 'Invalid Date';
-        }
-    }
-
     async editUser(userId) {
         if (!this.auth.hasPermission('admin')) {
-            this.ui.showToast('Insufficient permissions to edit users', 'error');
+            this.showToast('Insufficient permissions to edit users', 'error');
             return;
         }
 
         try {
-            this.ui.showLoading('Loading user...');
+            this.showLoading('Loading user...');
             const user = this.users.find(u => u.id === userId);
 
             if (user) {
+                // Populate form
                 document.getElementById('userModalTitle').textContent = 'Edit User';
                 document.getElementById('editUserId').value = user.id;
                 document.getElementById('userNameInput').value = user.name;
@@ -281,21 +207,27 @@ class UserManager {
                 document.getElementById('userRole').value = user.role;
                 document.getElementById('userStatus').value = user.status || 'active';
 
-                document.getElementById('userPassword').value = '';
-                document.getElementById('userConfirmPassword').value = '';
+                // Clear passwords and set placeholders
+                const password = document.getElementById('userPassword');
+                const confirmPassword = document.getElementById('userConfirmPassword');
+                if (password) {
+                    password.value = '';
+                    password.placeholder = 'Leave blank to keep current password';
+                }
+                if (confirmPassword) {
+                    confirmPassword.value = '';
+                    confirmPassword.placeholder = 'Leave blank to keep current password';
+                }
 
-                document.getElementById('userPassword').placeholder = 'Leave blank to keep current password';
-                document.getElementById('userConfirmPassword').placeholder = 'Leave blank to keep current password';
-
-                this.ui.showModal('userModal');
+                this.showModal('userModal');
             } else {
-                this.ui.showToast('User not found', 'error');
+                this.showToast('User not found', 'error');
             }
         } catch (error) {
-            console.error('Error loading user:', error);
-            this.ui.showToast('Error loading user', 'error');
+            console.error('❌ Error loading user:', error);
+            this.showToast('Error loading user', 'error');
         } finally {
-            this.ui.hideLoading();
+            this.hideLoading();
         }
     }
 
@@ -303,7 +235,7 @@ class UserManager {
         e.preventDefault();
 
         if (!this.auth.hasPermission('admin')) {
-            this.ui.showToast('Insufficient permissions to manage users', 'error');
+            this.showToast('Insufficient permissions to manage users', 'error');
             return;
         }
 
@@ -313,115 +245,95 @@ class UserManager {
         const phone = document.getElementById('userPhone').value.trim();
         const role = document.getElementById('userRole').value;
         const status = document.getElementById('userStatus').value;
-
         const password = document.getElementById('userPassword').value;
         const confirmPassword = document.getElementById('userConfirmPassword').value;
 
+        // Validation
         if (!name) {
-            this.ui.showToast('Name is required', 'error');
+            this.showToast('Name is required', 'error');
             return;
         }
 
-        if (!userId) {
-            if (!password) {
-                this.ui.showToast('Password is required', 'error');
-                return;
-            }
+        // For new users, password is required
+        if (!userId && !password) {
+            this.showToast('Password is required for new users', 'error');
+            return;
+        }
 
+        // Password validation
+        if (password) {
             if (password.length < 6) {
-                this.ui.showToast('Password must be at least 6 characters long', 'error');
+                this.showToast('Password must be at least 6 characters', 'error');
                 return;
             }
-
             if (password !== confirmPassword) {
-                this.ui.showToast('Passwords do not match', 'error');
+                this.showToast('Passwords do not match', 'error');
                 return;
             }
         }
 
+        // Email validation
         if (email && !this.validateEmail(email)) {
-            this.ui.showToast('Please enter a valid email address', 'error');
+            this.showToast('Please enter a valid email', 'error');
             return;
         }
-
-        if (phone && !this.validatePhone(phone)) {
-            this.ui.showToast('Please enter a valid phone number', 'error');
-            return;
-        }
-
-        const button = e.target.querySelector('button[type="submit"]');
-        const resetButton = this.ui.showButtonLoading ?
-            this.ui.showButtonLoading(button, 'Saving...') :
-            () => { if (button) button.disabled = false; };
 
         try {
+            this.showLoading('Saving user...');
+
             const userData = {
                 name: this.sanitizeInput(name),
-                email: email ? this.sanitizeInput(email) : null,
-                phone: phone ? this.sanitizeInput(phone) : null,
+                email: email || '',
+                phone: phone || '',
                 role,
                 status,
                 updated_at: new Date().toISOString()
             };
 
             if (userId) {
+                // Update existing user
                 if (password) {
-                    if (password.length < 6) {
-                        this.ui.showToast('Password must be at least 6 characters long', 'error');
-                        return;
-                    }
-                    if (password !== confirmPassword) {
-                        this.ui.showToast('Passwords do not match', 'error');
-                        return;
-                    }
                     userData.password = password;
                 }
-
                 await this.db.update('users', userId, userData);
-                this.ui.showToast('User updated successfully', 'success');
+                this.showToast('User updated successfully', 'success');
             } else {
+                // Create new user
                 userData.username = this.generateUsername(name);
                 userData.password = password;
                 userData.created_at = new Date().toISOString();
+                userData.id = this.generateId();
 
                 await this.db.create('users', userData);
-                this.ui.showToast('User created successfully', 'success');
+                this.showToast('User created successfully', 'success');
             }
 
-            this.ui.hideModal('userModal');
-            await this.loadUsers();
+            this.hideModal('userModal');
+            await this.loadUsers(); // Reload users
+
         } catch (error) {
-            console.error('Error saving user:', error);
-            this.ui.showToast('Error saving user: ' + error.message, 'error');
+            console.error('❌ Error saving user:', error);
+            this.showToast('Error saving user: ' + error.message, 'error');
         } finally {
-            resetButton();
+            this.hideLoading();
         }
-    }
-
-    generateUsername(name) {
-        const baseUsername = name.toLowerCase()
-            .replace(/\s+/g, '.')
-            .replace(/[^a-z0-9.]/g, '');
-
-        const timestamp = Date.now().toString().slice(-4);
-        return `${baseUsername}.${timestamp}`;
     }
 
     async deleteUser(userId) {
         if (!this.auth.hasPermission('admin')) {
-            this.ui.showToast('Insufficient permissions to delete users', 'error');
+            this.showToast('Insufficient permissions to delete users', 'error');
             return;
         }
 
         const user = this.users.find(u => u.id === userId);
         if (!user) {
-            this.ui.showToast('User not found', 'error');
+            this.showToast('User not found', 'error');
             return;
         }
 
         const currentUser = this.auth.getCurrentUser();
         if (userId === currentUser?.id) {
-            this.ui.showToast('Cannot delete your own account', 'error');
+            this.showToast('Cannot delete your own account', 'error');
             return;
         }
 
@@ -430,29 +342,96 @@ class UserManager {
         }
 
         try {
-            this.ui.showLoading('Deleting user...');
+            this.showLoading('Deleting user...');
             await this.db.delete('users', userId);
-            this.ui.showToast('User deleted successfully', 'success');
+            this.showToast('User deleted successfully', 'success');
             await this.loadUsers();
         } catch (error) {
-            console.error('Error deleting user:', error);
-            this.ui.showToast('Error deleting user: ' + error.message, 'error');
+            console.error('❌ Error deleting user:', error);
+            this.showToast('Error deleting user: ' + error.message, 'error');
         } finally {
-            this.ui.hideLoading();
+            this.hideLoading();
         }
     }
-    // In UserManager - update showExportOptions method
+
+    searchUsers(query) {
+        if (!query) {
+            this.renderUsersTable();
+            return;
+        }
+
+        const filteredUsers = this.users.filter(user =>
+            user.name.toLowerCase().includes(query.toLowerCase()) ||
+            user.username.toLowerCase().includes(query.toLowerCase()) ||
+            user.email?.toLowerCase().includes(query.toLowerCase()) ||
+            user.phone?.includes(query) ||
+            user.role.toLowerCase().includes(query.toLowerCase())
+        );
+
+        const tbody = document.getElementById('usersTableBody');
+        if (tbody) {
+            if (filteredUsers.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="no-data">
+                            <i class="fas fa-search"></i>
+                            <br>No users found matching "${query}"
+                        </td>
+                    </tr>
+                `;
+            } else {
+                // Temporarily replace the table with filtered results
+                const currentUser = this.auth.getCurrentUser();
+                tbody.innerHTML = filteredUsers.map(user => `
+                    <tr>
+                        <td>
+                            <div class="user-avatar-cell">
+                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=ff6b35&color=fff" 
+                                     alt="${user.name}" class="user-avatar-table">
+                                <div class="user-info-table">
+                                    <span class="user-name-table">
+                                        ${user.name}
+                                        ${user.id === currentUser?.id ? '<span class="current-user-badge">You</span>' : ''}
+                                    </span>
+                                    <span class="user-username-table">@${user.username}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>${user.email || '<span class="text-muted">N/A</span>'}</td>
+                        <td>${user.phone || '<span class="text-muted">N/A</span>'}</td>
+                        <td>
+                            <span class="role-badge role-${user.role}">${this.formatRoleName(user.role)}</span>
+                        </td>
+                        <td>${this.formatDate(user.created_at)}</td>
+                        <td>
+                            <span class="status-badge status-${user.status || 'active'}">${user.status || 'active'}</span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon btn-edit" onclick="app.getManagers().user.editUser('${user.id}')" 
+                                        ${user.id === currentUser?.id ? 'disabled title="Cannot edit your own account"' : ''}>
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                                <button class="btn-icon btn-delete" onclick="app.getManagers().user.deleteUser('${user.id}')"
+                                        ${user.id === currentUser?.id ? 'disabled title="Cannot delete your own account"' : ''}>
+                                    <i class="fas fa-trash"></i> Delete
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+    }
+
+    // Export functionality
     showExportOptions() {
-        this.showExportModal('users', ['excel', 'pdf']); // Now includes PDF
+        this.showExportModal('users', ['excel', 'pdf']);
     }
 
     showExportModal(type, allowedFormats = ['excel', 'pdf']) {
         const titles = {
-            'users': 'Users',
-            'employees': 'Employees',
-            'bills': 'Bills',
-            'pending': 'Pending Bills',
-            'payments': 'Payments'
+            'users': 'Users'
         };
 
         const formatOptions = allowedFormats.map(format => {
@@ -462,7 +441,7 @@ class UserManager {
             }[format];
 
             return `
-            <div class="export-option" onclick="app.getManagers().${type === 'users' ? 'user' : 'employee'}.exportTo${format.toUpperCase()}('${type}')">
+            <div class="export-option" onclick="app.getManagers().user.exportTo${format.toUpperCase()}('${type}')">
                 <div class="export-icon ${formatInfo.class}">
                     <i class="fas ${formatInfo.icon}"></i>
                 </div>
@@ -490,7 +469,7 @@ class UserManager {
                 </div>
                 
                 <div class="modal-actions">
-                    <button class="btn-secondary" onclick="app.getManagers().${type === 'users' ? 'user' : 'employee'}.closeExportModal()">
+                    <button class="btn-secondary" onclick="app.getManagers().user.closeExportModal()">
                         Cancel
                     </button>
                 </div>
@@ -502,7 +481,7 @@ class UserManager {
     }
 
     closeExportModal() {
-        this.ui.hideModal('exportModal');
+        this.hideModal('exportModal');
         const modal = document.getElementById('exportModal');
         if (modal) {
             modal.remove();
@@ -519,16 +498,14 @@ class UserManager {
         this.closeExportModal();
     }
 
-
-    // Update exportData method
     async exportData(type, format = 'excel') {
         try {
             if (!this.auth.hasPermission('admin')) {
-                this.ui.showToast('Insufficient permissions to export data', 'error');
+                this.showToast('Insufficient permissions to export data', 'error');
                 return;
             }
 
-            this.ui.showExportProgress(`Preparing ${type} data...`);
+            this.showExportProgress(`Preparing ${type} data...`);
 
             let data = [];
             let filename = '';
@@ -545,7 +522,7 @@ class UserManager {
             }
 
             if (data.length === 0) {
-                this.ui.showToast(`No ${type} data to export`, 'warning');
+                this.showToast(`No ${type} data to export`, 'warning');
                 return;
             }
 
@@ -571,12 +548,12 @@ class UserManager {
                 }
             }
 
-            this.ui.showToast(`${title} exported successfully`, 'success');
+            this.showToast(`${title} exported successfully`, 'success');
         } catch (error) {
             console.error(`Error exporting ${type}:`, error);
-            this.ui.showToast(`Error exporting ${type}: ${error.message}`, 'error');
+            this.showToast(`Error exporting ${type}: ${error.message}`, 'error');
         } finally {
-            this.ui.hideExportProgress();
+            this.hideExportProgress();
         }
     }
 
@@ -587,114 +564,38 @@ class UserManager {
         }
 
         document.body.insertAdjacentHTML('beforeend', html);
-        this.ui.showModal(modalId);
-    }
-    async exportUsers() {
-        try {
-            console.log('📤 Starting user export...');
-
-            if (this.ui.showExportProgress) {
-                this.ui.showExportProgress('Preparing user data...');
-            } else {
-                this.ui.showLoading('Preparing export...');
-            }
-
-            const users = await this.db.getUsers();
-            if (users.length === 0) {
-                this.ui.showToast('No users to export', 'warning');
-                return;
-            }
-
-            const exportData = users.map(user => ({
-                'Name': user.name,
-                'Username': user.username,
-                'Email': user.email || '',
-                'Phone': user.phone || '',
-                'Role': this.formatRoleName(user.role),
-                'Status': user.status,
-                'Created Date': this.formatDate(user.created_at)
-            }));
-
-            if (window.exportManager && typeof window.exportManager.exportToExcel === 'function') {
-                await window.exportManager.exportToExcel(exportData, 'users_export', 'Users Export');
-            } else if (window.Utils && typeof window.Utils.exportToExcel === 'function') {
-                window.Utils.exportToExcel(exportData, 'users_export');
-            } else {
-                this.fallbackExport(exportData, 'users_export');
-            }
-
-            this.ui.showToast('Users exported successfully', 'success');
-            console.log('✅ User export completed');
-
-        } catch (error) {
-            console.error('❌ Error exporting users:', error);
-            this.ui.showToast('Error exporting users: ' + error.message, 'error');
-        } finally {
-            if (this.ui.hideExportProgress) {
-                this.ui.hideExportProgress();
-            } else {
-                this.ui.hideLoading();
-            }
-        }
+        this.showModal(modalId);
     }
 
-    fallbackExport(data, filename) {
-        if (!data || data.length === 0) return;
-
-        const headers = Object.keys(data[0]);
-        const csvContent = [
-            headers.join(','),
-            ...data.map(row =>
-                headers.map(header =>
-                    `"${String(row[header] || '').replace(/"/g, '""')}"`
-                ).join(',')
-            )
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-
-        link.setAttribute('href', url);
-        link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    searchUsers(query) {
-        if (!query) {
-            this.renderUsersTable(this.users);
-            return;
-        }
-
-        const filteredUsers = this.users.filter(user =>
-            user.name.toLowerCase().includes(query.toLowerCase()) ||
-            user.username.toLowerCase().includes(query.toLowerCase()) ||
-            user.email?.toLowerCase().includes(query.toLowerCase()) ||
-            user.phone?.includes(query) ||
-            user.role.toLowerCase().includes(query.toLowerCase())
-        );
-
-        this.renderUsersTable(filteredUsers);
-    }
-
-    async getUserStats() {
-        const users = await this.db.getUsers();
-        const stats = {
-            total: users.length,
-            byRole: {},
-            byStatus: {}
+    // Utility methods
+    formatRoleName(role) {
+        const roleNames = {
+            'admin': 'Administrator',
+            'manager': 'Manager',
+            'user': 'User'
         };
+        return roleNames[role] || role;
+    }
 
-        users.forEach(user => {
-            stats.byRole[user.role] = (stats.byRole[user.role] || 0) + 1;
-            stats.byStatus[user.status] = (stats.byStatus[user.status] || 0) + 1;
-        });
+    formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        try {
+            return new Date(dateString).toLocaleDateString();
+        } catch (e) {
+            return 'Invalid Date';
+        }
+    }
 
-        return stats;
+    generateUsername(name) {
+        const baseUsername = name.toLowerCase()
+            .replace(/\s+/g, '.')
+            .replace(/[^a-z0-9.]/g, '');
+        const timestamp = Date.now().toString().slice(-4);
+        return `${baseUsername}.${timestamp}`;
+    }
+
+    generateId() {
+        return 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     }
 
     validateEmail(email) {
@@ -712,7 +613,94 @@ class UserManager {
         return input.replace(/[<>&"']/g, '');
     }
 
+    togglePasswordVisibility(toggleBtn) {
+        const container = toggleBtn.closest('.password-input-container');
+        const input = container?.querySelector('input');
+        const icon = toggleBtn?.querySelector('i');
+
+        if (!input || !icon) return;
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.className = 'fas fa-eye-slash';
+        } else {
+            input.type = 'password';
+            icon.className = 'fas fa-eye';
+        }
+    }
+
+    // UI helper methods
+    showToast(message, type = 'info') {
+        if (this.ui && this.ui.showToast) {
+            this.ui.showToast(message, type);
+        } else {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            alert(`${type.toUpperCase()}: ${message}`);
+        }
+    }
+
+    showLoading(message) {
+        if (this.ui && this.ui.showLoading) {
+            this.ui.showLoading(message);
+        } else {
+            console.log(`⏳ ${message}`);
+        }
+    }
+
+    hideLoading() {
+        if (this.ui && this.ui.hideLoading) {
+            this.ui.hideLoading();
+        }
+    }
+
+    showSectionLoading(message) {
+        if (this.ui && this.ui.showSectionLoading) {
+            this.ui.showSectionLoading('usersContent', message);
+        }
+    }
+
+    hideSectionLoading() {
+        if (this.ui && this.ui.hideSectionLoading) {
+            this.ui.hideSectionLoading('usersContent');
+        }
+    }
+
+    showModal(modalId) {
+        if (this.ui && this.ui.showModal) {
+            this.ui.showModal(modalId);
+        } else {
+            const modal = document.getElementById(modalId);
+            if (modal) modal.style.display = 'block';
+        }
+    }
+
+    hideModal(modalId) {
+        if (this.ui && this.ui.hideModal) {
+            this.ui.hideModal(modalId);
+        } else {
+            const modal = document.getElementById(modalId);
+            if (modal) modal.style.display = 'none';
+        }
+    }
+
+    showExportProgress(message) {
+        if (this.ui && this.ui.showExportProgress) {
+            this.ui.showExportProgress(message);
+        } else {
+            this.showLoading(message);
+        }
+    }
+
+    hideExportProgress() {
+        if (this.ui && this.ui.hideExportProgress) {
+            this.ui.hideExportProgress();
+        } else {
+            this.hideLoading();
+        }
+    }
+
     cleanup() {
+        // Cleanup event listeners
         const userForm = document.getElementById('userForm');
         if (userForm && userForm._listenerAttached) {
             userForm.removeEventListener('submit', this.handleUserSubmit);
@@ -727,4 +715,5 @@ class UserManager {
     }
 }
 
+// Make available globally
 window.UserManager = UserManager;

@@ -5,15 +5,20 @@ class BillingManager {
         if (!dependencies.db) throw new Error('BillingManager: db required');
         if (!dependencies.ui) throw new Error('BillingManager: ui required');
         if (!dependencies.auth) throw new Error('BillingManager: auth required');
-
+        
         // ✅ ASSIGN DEPENDENCIES
         this.db = dependencies.db;
         this.ui = dependencies.ui;
         this.auth = dependencies.auth;
+        this.Utils = dependencies.utils || this.createFallbackUtils();
+        
+        if (!this.Utils) {
+            console.warn('⚠️ Utils not provided, using fallback implementation');
+        }
 
         // ✅ BILLING DATA
-        this.employees = []; // ADD THIS LINE
-        this.customers = []; // ADD THIS LINE
+        this.employees = [];
+        this.customers = [];
         this.billItems = [];
         this.bills = [];
         this.payments = [];
@@ -32,17 +37,136 @@ class BillingManager {
         console.log('✅ BillingManager initialized');
     }
 
+    // ==================== FALLBACK UTILS ====================
+
+    createFallbackUtils() {
+        console.warn('⚠️ Creating fallback Utils for BillingManager');
+        return {
+            generateId: () => 'id_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36),
+            formatCurrency: (amount) => {
+                if (amount === null || amount === undefined) return '₹0.00';
+                return '₹' + parseFloat(amount).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+            },
+            formatDate: (dateString) => {
+                if (!dateString) return 'N/A';
+                try {
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString('en-IN', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                } catch (e) {
+                    return dateString;
+                }
+            },
+            validatePhone: (phone) => {
+                const phoneRegex = /^[6-9]\d{9}$/;
+                return phoneRegex.test(phone.replace(/\D/g, ''));
+            },
+            validateEmail: (email) => {
+                if (!email) return true;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(email);
+            },
+            sanitizeInput: (input) => {
+                if (typeof input !== 'string') return input;
+                return input
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#x27;')
+                    .replace(/\//g, '&#x2F;');
+            },
+            exportToExcel: (data, filename) => {
+                try {
+                    let csvContent = "data:text/csv;charset=utf-8,";
+                    const headers = Object.keys(data[0] || {});
+                    csvContent += headers.join(',') + '\n';
+                    
+                    data.forEach(row => {
+                        const values = headers.map(header => {
+                            let value = row[header] || '';
+                            if (typeof value === 'string' && value.includes(',')) {
+                                value = `"${value}"`;
+                            }
+                            return value;
+                        });
+                        csvContent += values.join(',') + '\n';
+                    });
+                    
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement('a');
+                    link.setAttribute('href', encodedUri);
+                    link.setAttribute('download', `${filename}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (error) {
+                    console.error('Error exporting to Excel:', error);
+                    throw error;
+                }
+            },
+            exportToPDF: async (data, filename, title) => {
+                try {
+                    let textContent = `${title}\n\n`;
+                    const headers = Object.keys(data[0] || {});
+                    
+                    textContent += headers.join('\t') + '\n';
+                    data.forEach(row => {
+                        const values = headers.map(header => row[header] || '');
+                        textContent += values.join('\t') + '\n';
+                    });
+                    
+                    const blob = new Blob([textContent], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${filename}.txt`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    console.error('Error exporting to PDF:', error);
+                    throw error;
+                }
+            }
+        };
+    }
+
+    // ==================== PERMISSION METHODS ====================
+
+    hasPermission(requiredPermission) {
+        return this.auth.hasPermission(requiredPermission);
+    }
+
+    getCurrentUser() {
+        return this.auth.getCurrentUser();
+    }
+
+    canPerformAction(action) {
+        const user = this.getCurrentUser();
+        if (!user) return false;
+
+        const permissions = {
+            'admin': ['create', 'edit', 'delete', 'view', 'export'],
+            'supervisor': ['create', 'edit', 'view', 'export'],
+            'user': ['view']
+        };
+
+        const userPermissions = permissions[user.role] || permissions['user'];
+        return userPermissions.includes(action);
+    }
+
     // ==================== INITIALIZATION ====================
 
-  // ✅ CORRECT - with await
-async initialize() {
-    await this.loadCustomers(); // ADD AWAIT HERE
-    await this.loadProducts();
-    this.loadCustomProducts();
-    this.setupEventListeners();
-    return Promise.resolve();
-}
-     // ADD THIS METHOD
+    async initialize() {
+        await this.loadCustomers();
+        await this.loadProducts();
+        this.loadCustomProducts();
+        this.setupEventListeners();
+        return Promise.resolve();
+    }
+
     async loadCustomers() {
         try {
             const customerManager = window.app?.getManagers()?.customer;
@@ -56,16 +180,6 @@ async initialize() {
             this.customers = [];
         }
     }
-
-    // UPDATE initialize method
-   // ✅ CORRECT - with await
-async initialize() {
-    await this.loadCustomers(); // ADD AWAIT HERE
-    await this.loadProducts();
-    this.loadCustomProducts();
-    this.setupEventListeners();
-    return Promise.resolve();
-}
 
     async loadProducts() {
         try {
@@ -192,7 +306,7 @@ async initialize() {
     // ==================== BILL MANAGEMENT ====================
 
     showAddBillModal(customer = null) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('create')) {
             this.ui.showToast('Insufficient permissions to create bills', 'error');
             return;
         }
@@ -253,7 +367,7 @@ async initialize() {
             if (bill.items && typeof bill.items === 'string') {
                 const items = JSON.parse(bill.items);
                 this.billItems = items.map(item => ({
-                    id: Utils.generateId(),
+                    id: this.Utils.generateId(),
                     product_id: item.product_id,
                     product_name: item.product_name,
                     quantity: item.quantity,
@@ -285,28 +399,35 @@ async initialize() {
         }
     }
 
-    // Check if user can edit bill
+    // FIXED: Corrected bill editing permission logic
     canEditBill(bill) {
-        const currentUser = this.auth.getCurrentUser();
+        const currentUser = this.getCurrentUser();
         if (!currentUser) return false;
 
+        // Admin can edit any bill
         if (currentUser.role === 'admin') return true;
 
+        // Supervisor can only edit bills they created or recent bills
         if (currentUser.role === 'supervisor') {
-            const sortedBills = [...this.bills].sort((a, b) =>
-                new Date(b.created_at) - new Date(a.created_at)
-            );
-            const lastBill = sortedBills[0];
-            return lastBill && lastBill.id === bill.id;
+            // Check if supervisor created this bill
+            if (bill.created_by === currentUser.id) return true;
+            
+            // Allow editing of recent bills (within last 24 hours)
+            const billDate = new Date(bill.created_at || bill.bill_date);
+            const now = new Date();
+            const hoursDiff = (now - billDate) / (1000 * 60 * 60);
+            
+            return hoursDiff <= 24; // Can edit bills from last 24 hours
         }
 
+        // Regular users cannot edit bills
         return false;
     }
 
     // ==================== BILL ITEMS MANAGEMENT ====================
 
     addBillItem() {
-        const itemId = Utils.generateId();
+        const itemId = this.Utils.generateId();
         this.billItems.push({
             id: itemId,
             product_id: '',
@@ -388,7 +509,7 @@ async initialize() {
                         <input type="text" 
                                class="amount-display"
                                data-item-id="${item.id}"
-                               value="${Utils.formatCurrency(item.amount)}" 
+                               value="${this.Utils.formatCurrency(item.amount)}" 
                                readonly>
                     </div>
                     
@@ -509,7 +630,7 @@ async initialize() {
 
         const amountDisplay = document.querySelector(`.amount-display[data-item-id="${itemId}"]`);
         if (amountDisplay) {
-            amountDisplay.value = Utils.formatCurrency(item.amount);
+            amountDisplay.value = this.Utils.formatCurrency(item.amount);
         }
     }
 
@@ -529,9 +650,9 @@ async initialize() {
         const gstAmountInput = document.getElementById('gstAmountInput');
         const totalAmountEl = document.getElementById('totalAmount');
 
-        if (subTotalEl) subTotalEl.textContent = Utils.formatCurrency(subTotal);
-        if (gstAmountInput) gstAmountInput.value = Utils.formatCurrency(gstAmount);
-        if (totalAmountEl) totalAmountEl.textContent = Utils.formatCurrency(totalAmount);
+        if (subTotalEl) subTotalEl.textContent = this.Utils.formatCurrency(subTotal);
+        if (gstAmountInput) gstAmountInput.value = this.Utils.formatCurrency(gstAmount);
+        if (totalAmountEl) totalAmountEl.textContent = this.Utils.formatCurrency(totalAmount);
     }
 
     // ==================== BILL SUBMISSION ====================
@@ -539,7 +660,7 @@ async initialize() {
     async handleBillSubmit(e) {
         e.preventDefault();
 
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('create') && !this.canPerformAction('edit')) {
             this.ui.showToast('Insufficient permissions to create bills', 'error');
             return;
         }
@@ -572,7 +693,7 @@ async initialize() {
             }
 
             // Validate phone format
-            if (!Utils.validatePhone(customerPhone)) {
+            if (!this.Utils.validatePhone(customerPhone)) {
                 this.ui.showToast('Please enter a valid 10-digit phone number', 'error');
                 return;
             }
@@ -586,9 +707,9 @@ async initialize() {
                         // Auto-create customer if doesn't exist
                         try {
                             const customerData = {
-                                name: Utils.sanitizeInput(customerName),
-                                phone: Utils.sanitizeInput(customerPhone),
-                                email: customerEmail ? Utils.sanitizeInput(customerEmail) : null,
+                                name: this.Utils.sanitizeInput(customerName),
+                                phone: this.Utils.sanitizeInput(customerPhone),
+                                email: customerEmail ? this.Utils.sanitizeInput(customerEmail) : null,
                                 created_at: new Date().toISOString()
                             };
                             customerData.id = `CUST_${Date.now()}`;
@@ -654,26 +775,30 @@ async initialize() {
                 custom_product_name: item.custom_product_name
             }));
 
+            const currentUser = this.getCurrentUser();
             const billData = {
                 bill_number: billNumber,
                 bill_date: billDate,
-                customer_name: Utils.sanitizeInput(customerName),
-                customer_phone: Utils.sanitizeInput(customerPhone),
-                customer_email: customerEmail ? Utils.sanitizeInput(customerEmail) : null,
+                customer_name: this.Utils.sanitizeInput(customerName),
+                customer_phone: this.Utils.sanitizeInput(customerPhone),
+                customer_email: customerEmail ? this.Utils.sanitizeInput(customerEmail) : null,
                 items: JSON.stringify(itemsForStorage),
                 sub_total: subTotal,
                 gst_rate: gstRate,
                 gst_amount: gstAmount,
                 total_amount: totalAmount,
                 status: 'pending',
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                created_by: currentUser?.id || 'system'
             };
 
             if (this.editingBillId) {
+                billData.updated_at = new Date().toISOString();
+                billData.updated_by = currentUser?.id || 'system';
                 await this.db.update('bills', this.editingBillId, billData);
                 this.ui.showToast('Bill updated successfully', 'success');
             } else {
-                // billData.id = `BILL_${Date.now()}`;
+                billData.id = `BILL_${Date.now()}`;
                 await this.db.create('bills', billData);
                 this.ui.showToast('Bill created successfully', 'success');
             }
@@ -830,7 +955,7 @@ async initialize() {
             balanceDisplay.innerHTML = `
                 <div class="balance-info">
                     <strong>Customer Balance:</strong>
-                    <span style="color: ${color}; font-weight: bold;">${sign}${Utils.formatCurrency(balance)}</span>
+                    <span style="color: ${color}; font-weight: bold;">${sign}${this.Utils.formatCurrency(balance)}</span>
                 </div>
             `;
             balanceDisplay.style.display = 'block';
@@ -848,7 +973,7 @@ async initialize() {
         const isPositive = balance >= 0;
         const color = isPositive ? '#10b981' : '#ef4444';
         const sign = isPositive ? '+' : '';
-        return `<span style="color: ${color}; font-weight: bold;">${sign}${Utils.formatCurrency(balance)}</span>`;
+        return `<span style="color: ${color}; font-weight: bold;">${sign}${this.Utils.formatCurrency(balance)}</span>`;
     }
 
     // ==================== BILL VIEW & ACTIONS ====================
@@ -888,7 +1013,7 @@ async initialize() {
                                     </div>
                                     <div class="info-row">
                                         <label>Date:</label>
-                                        <span>${Utils.formatDate(bill.bill_date)}</span>
+                                        <span>${this.Utils.formatDate(bill.bill_date)}</span>
                                     </div>
                                     <div class="info-row">
                                         <label>Status:</label>
@@ -931,8 +1056,8 @@ async initialize() {
                                             <tr>
                                                 <td>${item.product_name || item.description}</td>
                                                 <td>${item.quantity}</td>
-                                                <td>${Utils.formatCurrency(item.price)}</td>
-                                                <td>${Utils.formatCurrency(item.amount)}</td>
+                                                <td>${this.Utils.formatCurrency(item.price)}</td>
+                                                <td>${this.Utils.formatCurrency(item.amount)}</td>
                                             </tr>
                                         `).join('')}
                                     </tbody>
@@ -943,15 +1068,15 @@ async initialize() {
                             <div class="bill-summary-view">
                                 <div class="summary-row">
                                     <span>Sub Total:</span>
-                                    <span>${Utils.formatCurrency(bill.sub_total)}</span>
+                                    <span>${this.Utils.formatCurrency(bill.sub_total)}</span>
                                 </div>
                                 <div class="summary-row">
                                     <span>GST (${bill.gst_rate}%):</span>
-                                    <span>${Utils.formatCurrency(bill.gst_amount)}</span>
+                                    <span>${this.Utils.formatCurrency(bill.gst_amount)}</span>
                                 </div>
                                 <div class="summary-row total">
                                     <span>Total Amount:</span>
-                                    <span>${Utils.formatCurrency(bill.total_amount)}</span>
+                                    <span>${this.Utils.formatCurrency(bill.total_amount)}</span>
                                 </div>
                             </div>
 
@@ -962,7 +1087,7 @@ async initialize() {
                                         <i class="fas fa-edit"></i> Edit Bill
                                     </button>
                                 ` : ''}
-                                ${bill.status === 'pending' ? `
+                                ${bill.status === 'pending' && this.canPerformAction('edit') ? `
                                     <button class="btn-secondary" id="markPaidBtn">
                                         <i class="fas fa-check"></i> Mark as Paid
                                     </button>
@@ -1055,7 +1180,7 @@ async initialize() {
     // ==================== BILL ACTIONS ====================
 
     async markAsPaid(billId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('edit')) {
             this.ui.showToast('Insufficient permissions to update bills', 'error');
             return;
         }
@@ -1073,9 +1198,11 @@ async initialize() {
                 try {
                     this.ui.showLoading('Updating bill...');
 
+                    const currentUser = this.getCurrentUser();
                     await this.db.update('bills', billId, { 
                         status: 'paid',
-                        updated_at: new Date().toISOString()
+                        updated_at: new Date().toISOString(),
+                        updated_by: currentUser?.id || 'system'
                     });
 
                     const paymentData = {
@@ -1086,7 +1213,8 @@ async initialize() {
                         amount: bill.total_amount,
                         payment_method: 'cash',
                         payment_date: new Date().toISOString().split('T')[0],
-                        created_at: new Date().toISOString()
+                        created_at: new Date().toISOString(),
+                        created_by: currentUser?.id || 'system'
                     };
 
                     paymentData.id = `PAY_${billId}_${Date.now()}`;
@@ -1108,7 +1236,7 @@ async initialize() {
     }
 
     async deleteBill(billId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('delete')) {
             this.ui.showToast('Insufficient permissions to delete bills', 'error');
             return;
         }
@@ -1143,7 +1271,7 @@ async initialize() {
 
     async loadBills() {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('view')) {
                 this.ui.showToast('Access denied', 'error');
                 return;
             }
@@ -1169,7 +1297,7 @@ async initialize() {
 
     async loadPendingBills() {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('view')) {
                 this.ui.showToast('Access denied', 'error');
                 return;
             }
@@ -1188,7 +1316,7 @@ async initialize() {
 
     async loadPayments() {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('view')) {
                 this.ui.showToast('Access denied', 'error');
                 return;
             }
@@ -1244,9 +1372,9 @@ async initialize() {
                        ${bill.customer_name || 'N/A'}
                     </a>
                 </td>
-                <td>${Utils.formatCurrency(bill.total_amount)}</td>
-                <td>${Utils.formatCurrency(bill.gst_amount)}</td>
-                <td>${Utils.formatDate(bill.bill_date)}</td>
+                <td>${this.Utils.formatCurrency(bill.total_amount)}</td>
+                <td>${this.Utils.formatCurrency(bill.gst_amount)}</td>
+                <td>${this.Utils.formatDate(bill.bill_date)}</td>
                 <td>
                     <span class="status-badge status-${bill.status}">${bill.status}</span>
                 </td>
@@ -1261,14 +1389,16 @@ async initialize() {
                                 <i class="fas fa-edit"></i>
                             </button>
                         ` : ''}
-                        ${bill.status === 'pending' ? `
+                        ${bill.status === 'pending' && this.canPerformAction('edit') ? `
                             <button class="btn-icon" onclick="app.getManagers().billing.markAsPaid('${bill.id}')" title="Mark as Paid">
                                 <i class="fas fa-check"></i>
                             </button>
                         ` : ''}
-                        <button class="btn-icon btn-danger" onclick="app.getManagers().billing.deleteBill('${bill.id}')" title="Delete Bill">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        ${this.canPerformAction('delete') ? `
+                            <button class="btn-icon btn-danger" onclick="app.getManagers().billing.deleteBill('${bill.id}')" title="Delete Bill">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </td>
             </tr>
@@ -1309,14 +1439,16 @@ async initialize() {
                        ${bill.customer_name || 'N/A'}
                     </a>
                 </td>
-                <td>${Utils.formatCurrency(bill.total_amount)}</td>
-                <td>${Utils.formatDate(bill.bill_date)}</td>
+                <td>${this.Utils.formatCurrency(bill.total_amount)}</td>
+                <td>${this.Utils.formatDate(bill.bill_date)}</td>
                 <td>${this.formatBalance(balance)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon" onclick="app.getManagers().billing.markAsPaid('${bill.id}')" title="Mark as Paid">
-                            <i class="fas fa-check"></i>
-                        </button>
+                        ${this.canPerformAction('edit') ? `
+                            <button class="btn-icon" onclick="app.getManagers().billing.markAsPaid('${bill.id}')" title="Mark as Paid">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        ` : ''}
                         <button class="btn-icon" onclick="app.getManagers().billing.viewBill('${bill.id}')" title="View Bill">
                             <i class="fas fa-eye"></i>
                         </button>
@@ -1347,8 +1479,8 @@ async initialize() {
                 <td>${payment.id?.slice(0, 8) || 'N/A'}</td>
                 <td>${payment.bill_number || 'N/A'}</td>
                 <td>${payment.customer_name || 'N/A'}</td>
-                <td>${Utils.formatCurrency(payment.amount)}</td>
-                <td>${Utils.formatDate(payment.payment_date)}</td>
+                <td>${this.Utils.formatCurrency(payment.amount)}</td>
+                <td>${this.Utils.formatDate(payment.payment_date)}</td>
                 <td>${payment.payment_method || 'cash'}</td>
             </tr>
         `).join('');
@@ -1467,6 +1599,11 @@ async initialize() {
     // ==================== EXPORT METHODS ====================
 
     showExportOptions(type) {
+        if (!this.canPerformAction('export')) {
+            this.ui.showToast('Insufficient permissions to export data', 'error');
+            return;
+        }
+
         const titles = {
             'bills': 'Bills',
             'pending': 'Pending Bills',
@@ -1541,7 +1678,7 @@ async initialize() {
 
     async exportData(type, format = 'excel') {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('export')) {
                 this.ui.showToast('Insufficient permissions to export data', 'error');
                 return;
             }
@@ -1584,7 +1721,7 @@ async initialize() {
                         return {
                             'Bill Number': record.bill_number,
                             'Customer': record.customer_name,
-                            'Date': Utils.formatDate(record.bill_date),
+                            'Date': this.Utils.formatDate(record.bill_date),
                             'Sub Total': record.sub_total,
                             'GST Amount': record.gst_amount,
                             'Total Amount': record.total_amount,
@@ -1595,8 +1732,8 @@ async initialize() {
                             'Bill Number': record.bill_number,
                             'Customer': record.customer_name,
                             'Amount': record.total_amount,
-                            'Date': Utils.formatDate(record.bill_date),
-                            'Due Date': Utils.formatDate(record.bill_date)
+                            'Date': this.Utils.formatDate(record.bill_date),
+                            'Due Date': this.Utils.formatDate(record.bill_date)
                         };
                     case 'payments':
                         return {
@@ -1604,7 +1741,7 @@ async initialize() {
                             'Bill Number': record.bill_number,
                             'Customer': record.customer_name,
                             'Amount': record.amount,
-                            'Date': Utils.formatDate(record.payment_date),
+                            'Date': this.Utils.formatDate(record.payment_date),
                             'Method': record.payment_method
                         };
                     default:
@@ -1616,13 +1753,13 @@ async initialize() {
                 if (window.exportManager) {
                     await window.exportManager.exportToPDF(exportData, filename, title);
                 } else {
-                    await Utils.exportToPDF(exportData, filename, title);
+                    await this.Utils.exportToPDF(exportData, filename, title);
                 }
             } else {
                 if (window.exportManager) {
                     await window.exportManager.exportToExcel(exportData, filename, title);
                 } else {
-                    Utils.exportToExcel(exportData, filename);
+                    this.Utils.exportToExcel(exportData, filename);
                 }
             }
 

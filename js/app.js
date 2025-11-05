@@ -132,7 +132,6 @@ class UpdateManager {
                 downloadBtn.addEventListener('click', () => {
                     this.hideUpdateModal();
                     this.showDownloadProgress(0);
-                    // ✅ FIXED: Use the correct IPC call
                     if (window.electronAPI?.downloadUpdate) {
                         window.electronAPI.downloadUpdate();
                     }
@@ -257,8 +256,37 @@ class UpdateManager {
         });
     }
 
+    showCustomModal(html, modalId) {
+        const existingModal = document.getElementById(modalId);
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        document.body.insertAdjacentHTML('beforeend', html);
+        
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'flex';
+            
+            // Add close event
+            const closeBtn = modal.querySelector('.modal-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    this.hideUpdateModal();
+                });
+            }
+            
+            // Close on background click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.hideUpdateModal();
+                }
+            });
+        }
+    }
+
     hideUpdateModal() {
-        const modals = ['updateAvailableModal', 'updateReadyModal'];
+        const modals = ['updateAvailableModal', 'updateReadyModal', 'exportModal'];
         modals.forEach(modalId => {
             const modal = document.getElementById(modalId);
             if (modal) modal.remove();
@@ -275,6 +303,8 @@ class UpdateManager {
         this.hideUpdateUI();
     }
 }
+
+window.UpdateManager = UpdateManager;
 
 class BusinessDashboard {
     constructor() {
@@ -299,27 +329,15 @@ class BusinessDashboard {
         console.log('🚀 Starting Business Dashboard initialization...');
 
         try {
-            // Wait for DOM to be ready
             if (document.readyState === 'loading') {
                 await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
             }
 
-            // Initialize core utilities first
             await this.initializeCore();
-
-            // Initialize database
             await this.initializeDatabase();
-
-            // Initialize authentication
             await this.initializeAuth();
-
-            // Initialize UI
             await this.initializeUI();
-
-            // Initialize business managers
             await this.initializeBusinessManagers();
-
-            // Finalize initialization
             await this.finalizeInitialization();
 
             this.initializeUpdateManager();
@@ -336,7 +354,6 @@ class BusinessDashboard {
     async initializeCore() {
         console.log('📦 Initializing core utilities...');
 
-        // Wait for themeManager and langManager to exist
         await new Promise(resolve => {
             const check = () => {
                 if (window.themeManager && window.langManager) resolve();
@@ -361,7 +378,6 @@ class BusinessDashboard {
         this.auth = new AuthManager(this.db);
         await this.auth.initialize();
 
-        // ✅ ADD THIS: Update sidebar after auth
         const currentUser = this.auth.getCurrentUser();
         if (currentUser) {
             this.updateSidebarVisibility(currentUser.role);
@@ -385,7 +401,6 @@ class BusinessDashboard {
         console.log('👥 Initializing business managers...');
 
         try {
-            // ✅ VERIFY ALL DEPENDENCIES EXIST
             if (!this.db) throw new Error('Database manager not initialized');
             if (!this.ui) throw new Error('UI manager not initialized');
             if (!this.auth) throw new Error('Auth manager not initialized');
@@ -402,7 +417,6 @@ class BusinessDashboard {
                 auth: !!this.auth
             });
 
-            // ✅ FIXED: INITIALIZE ALL MANAGERS INCLUDING ATTENDANCE
             this.managers = {
                 user: new UserManager(dependencies),
                 employee: new EmployeeManager(dependencies),
@@ -415,7 +429,6 @@ class BusinessDashboard {
                 settings: new SettingsManager(dependencies)
             };
 
-            // ✅ SAFE INITIALIZATION
             const initializationPromises = Object.entries(this.managers).map(async ([key, manager]) => {
                 try {
                     if (manager && typeof manager.initialize === 'function') {
@@ -432,7 +445,6 @@ class BusinessDashboard {
 
             await Promise.all(initializationPromises);
 
-            // ✅ MAKE MANAGERS GLOBALLY ACCESSIBLE
             window.app = this;
             window.exportManager = this.managers.export;
 
@@ -445,7 +457,6 @@ class BusinessDashboard {
         }
     }
 
-    // 🆕 **CRITICAL FIX: UPDATED SECTION DATA LOADING**
     async loadSectionData(sectionId) {
         try {
             console.log(`📊 Loading data for section: ${sectionId}`);
@@ -459,11 +470,8 @@ class BusinessDashboard {
                 return;
             }
 
-            // ✅ FIXED: Update sidebar visibility for current user role
             this.updateSidebarVisibility(currentUser.role);
 
-            // ✅ REPLACE WITH:
-            // Check permissions only if method exists, otherwise allow access
             if (this.auth.canAccessSection) {
                 if (!this.auth.canAccessSection(sectionId)) {
                     this.ui.showToast('You do not have permission to access this section', 'error');
@@ -471,34 +479,54 @@ class BusinessDashboard {
                 }
             }
 
-            // ✅ **FIXED: PROPER SECTION HANDLERS WITH DATA LOADING**
             const sectionHandlers = {
                 'dashboard': () => this.loadDashboardData(),
-                'users': () => this.managers.user?.loadUsers?.(),
-                'employees': () => this.managers.employee?.loadEmployees?.(),
-                'salary': () => {
+                'users': async () => {
+                    await this.ensureManagerInitialized('user');
+                    await this.managers.user?.loadUsers?.();
+                },
+                'employees': async () => {
+                    await this.ensureManagerInitialized('employee');
+                    await this.managers.employee?.loadEmployees?.();
+                },
+                'salary': async () => {
+                    await this.ensureManagerInitialized('salary');
                     const manager = this.managers.salary;
                     if (manager?.loadSalaryData) return manager.loadSalaryData();
                     if (manager?.setupSalaryForm) manager.setupSalaryForm();
-                    return Promise.resolve();
                 },
-                'attendance': () => {
+                'attendance': async () => {
+                    await this.ensureManagerInitialized('attendance');
                     const manager = this.managers.attendance;
                     if (manager?.loadAttendanceSection) return manager.loadAttendanceSection();
                     if (manager?.loadAttendanceRecords) return manager.loadAttendanceRecords();
-                    return Promise.resolve();
                 },
-                'salary-payments': () => {
+                'salary-payments': async () => {
+                    await this.ensureManagerInitialized('salary');
                     const manager = this.managers.salary;
                     if (manager?.loadSalaryPaymentsData) return manager.loadSalaryPaymentsData();
                     if (manager?.initializeSalaryPayments) return manager.initializeSalaryPayments();
-                    return Promise.resolve();
                 },
-                'billing': () => this.managers.billing?.loadBills?.(),
-                'customers': () => this.managers.customer?.loadCustomers?.(),
-                'pending': () => this.managers.billing?.loadPendingBills?.(),
-                'payments': () => this.managers.billing?.loadPayments?.(),
-                'reports': () => this.managers.reports?.loadReports?.(),
+                'billing': async () => {
+                    await this.ensureManagerInitialized('billing');
+                    await this.managers.billing?.loadBills?.();
+                },
+                'customers': async () => {
+                    await this.ensureManagerInitialized('customer');
+                    await this.managers.customer?.loadCustomers?.();
+                },
+                'pending': async () => {
+                    await this.ensureManagerInitialized('billing');
+                    await this.managers.billing?.loadPendingBills?.();
+                },
+                'payments': async () => {
+                    await this.ensureManagerInitialized('billing');
+                    await this.managers.billing?.loadPayments?.();
+                },
+                'reports': async () => {
+                    await this.ensureManagerInitialized('reports');
+                    await this.managers.reports?.loadReports?.();
+                },
                 'settings': () => this.loadSettings()
             };
 
@@ -518,17 +546,35 @@ class BusinessDashboard {
         }
     }
 
-    // 🆕 **FIXED SECTION LISTENERS**
+    async ensureManagerInitialized(managerName) {
+        const manager = this.managers[managerName];
+        if (!manager) {
+            console.error(`❌ Manager ${managerName} not found`);
+            return false;
+        }
+        
+        if (!manager.isInitialized) {
+            console.log(`🔄 Initializing ${managerName}...`);
+            try {
+                await manager.initialize();
+                return true;
+            } catch (error) {
+                console.error(`❌ Failed to initialize ${managerName}:`, error);
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
     setupSectionListeners() {
         console.log('🔗 Setting up section listeners...');
 
-        // Listen for section changes from the UI
         document.addEventListener('sectionChanged', (event) => {
             console.log('🎯 Section changed event:', event.detail.section);
             this.loadSectionData(event.detail.section);
         });
 
-        // Listen for manual section clicks
         document.addEventListener('click', (e) => {
             const navLink = e.target.closest('.nav-link');
             if (navLink && navLink.dataset.section) {
@@ -556,18 +602,15 @@ class BusinessDashboard {
         console.log('✅ Section listeners setup complete');
     }
 
-    // 🆕 **ADD THIS METHOD: Update Sidebar Visibility**
     updateSidebarVisibility(userRole) {
         console.log('🔧 Updating sidebar visibility for role:', userRole);
 
-        // Define which roles can see which items
         const rolePermissions = {
             'admin-only': ['admin'],
             'admin-manager': ['admin', 'manager'],
             'admin-supervisor': ['admin', 'supervisor', 'manager']
         };
 
-        // Apply visibility rules
         Object.entries(rolePermissions).forEach(([className, allowedRoles]) => {
             const items = document.querySelectorAll(`.${className}`);
             items.forEach(item => {
@@ -577,7 +620,6 @@ class BusinessDashboard {
             });
         });
 
-        // Always show dashboard, reports, and settings to everyone
         const alwaysShow = ['dashboard', 'reports', 'settings'];
         alwaysShow.forEach(section => {
             const item = document.querySelector(`[data-section="${section}"]`)?.closest('li');
@@ -593,7 +635,6 @@ class BusinessDashboard {
         try {
             console.log('📊 Loading dashboard data...');
 
-            // Get all necessary data for dashboard
             const [bills, customers, employees, payments] = await Promise.all([
                 this.db.getBills(),
                 this.db.getCustomers(),
@@ -601,7 +642,6 @@ class BusinessDashboard {
                 this.db.getPayments()
             ]);
 
-            // Calculate dashboard statistics
             const totalSales = bills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
             const totalGST = bills.reduce((sum, bill) => sum + (bill.gst_amount || 0), 0);
             const totalBills = bills.length;
@@ -609,7 +649,6 @@ class BusinessDashboard {
             const totalCustomers = customers.length;
             const totalEmployees = employees.length;
 
-            // Update dashboard cards
             const elements = {
                 'totalBalance': this.formatCurrency(totalSales),
                 'gstAmount': this.formatCurrency(totalGST),
@@ -635,7 +674,6 @@ class BusinessDashboard {
         try {
             console.log('⚙️ Loading settings...');
 
-            // Load current user data for settings
             const currentUser = this.auth.getCurrentUser();
             if (currentUser) {
                 const settingsAvatar = document.getElementById('settingsAvatar');
@@ -685,7 +723,6 @@ class BusinessDashboard {
                 totalEmployees: employees.length
             };
 
-            // Update UI with stats
             if (this.ui && typeof this.ui.updateDashboardStats === 'function') {
                 this.ui.updateDashboardStats(stats);
             }
@@ -756,7 +793,6 @@ class BusinessDashboard {
         this.setupErrorHandling();
         this.setupCleanup();
 
-        // Initialize from saved state
         if (this.ui && typeof this.ui.initializeFromSavedState === 'function') {
             this.ui.initializeFromSavedState();
         }
@@ -792,14 +828,12 @@ class BusinessDashboard {
     cleanup() {
         console.log('🧹 Cleaning up application...');
 
-        // Cleanup managers
         Object.values(this.managers).forEach(manager => {
             if (manager && typeof manager.cleanup === 'function') {
                 manager.cleanup();
             }
         });
 
-        // Cleanup core components
         if (this.db) this.db.cleanup();
         if (this.ui) this.ui.cleanup?.();
         if (this.auth) this.auth.cleanup?.();
@@ -809,12 +843,10 @@ class BusinessDashboard {
     }
 
     notifyAppReady() {
-        // Show app ready notification
         if (this.ui && typeof this.ui.showAppReady === 'function') {
             this.ui.showAppReady();
         }
 
-        // Dispatch app ready event
         window.dispatchEvent(new CustomEvent('appReady', {
             detail: {
                 version: '2.1.0',
@@ -833,7 +865,6 @@ class BusinessDashboard {
         if (this.ui && typeof this.ui.showFatalError === 'function') {
             this.ui.showFatalError(errorMessage);
         } else {
-            // Fallback error display
             document.body.innerHTML = `
                 <div style="padding: 2rem; text-align: center; font-family: Arial, sans-serif;">
                     <h1 style="color: #dc3545; margin-bottom: 1rem;">Application Error</h1>
@@ -847,7 +878,6 @@ class BusinessDashboard {
         }
     }
 
-    // Utility methods
     formatCurrency(amount) {
         if (typeof amount !== 'number') {
             amount = parseFloat(amount) || 0;
@@ -865,7 +895,6 @@ class BusinessDashboard {
         return number.toLocaleString('en-IN');
     }
 
-    // Manager access methods
     getManagers() {
         return this.managers;
     }
@@ -887,20 +916,17 @@ class BusinessDashboard {
         };
     }
 
-    // Static method to get instance
     static getInstance() {
         return window.app;
     }
 }
 
-// Global initialization with enhanced error handling
 let appInstance = null;
 
 async function initializeApp() {
     try {
         console.log('🎉 Starting application...');
 
-        // Check if required dependencies are available
         if (typeof Utils === 'undefined') {
             throw new Error('Utils library not loaded');
         }
@@ -917,22 +943,18 @@ async function initializeApp() {
             throw new Error('UIManager not loaded');
         }
 
-        // Create and initialize app instance
         appInstance = new BusinessDashboard();
         await appInstance.initialize();
 
-        // Make app globally accessible
         window.app = appInstance;
 
         console.log('🎊 Application fully loaded and ready!');
 
-        // Dispatch global ready event
         window.dispatchEvent(new Event('appFullyLoaded'));
 
     } catch (error) {
         console.error('💥 Failed to initialize application:', error);
 
-        // Enhanced error display
         const errorHtml = `
             <div style="
                 position: fixed;
@@ -998,39 +1020,34 @@ async function initializeApp() {
     }
 }
 
-// Start initialization based on document ready state
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
     initializeApp();
 }
-// app.js - Updated initialization
+
 document.addEventListener('DOMContentLoaded', async function () {
     console.log('🚀 Starting Business Dashboard Application...');
 
     try {
-        // Initialize the fixed UI Manager
         const uiManager = new UIManager({
             themeManager: window.themeManager,
             langManager: window.langManager,
             auth: window.auth
         });
 
-        // Initialize UI
         await uiManager.initialize();
 
-        // Store globally for access from other modules
         window.uiManager = uiManager;
 
         console.log('🎉 Application started successfully!');
 
     } catch (error) {
         console.error('💥 Application failed to start:', error);
-        // Show error to user
         alert('Application failed to load. Please refresh the page.');
     }
 });
-// Export for module systems if needed
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { BusinessDashboard, UpdateManager };
 }

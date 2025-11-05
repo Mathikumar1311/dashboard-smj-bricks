@@ -111,7 +111,7 @@ class AttendanceManager {
 
         const modalHtml = `
             <div id="quickAttendanceModal" class="modal">
-                <div class="modal-content" style="max-width: 1200px;">
+                <div class="modal-content" style="max-width: 1000px; height: 90vh;">
                     <div class="modal-header">
                         <h3><i class="fas fa-calendar-check"></i> Mark Attendance - ${today}</h3>
                         <div class="header-actions">
@@ -154,12 +154,11 @@ class AttendanceManager {
                         <div class="employee-attendance-grid">
                             <div class="grid-header">
                                 <div class="col-employee">Employee Details</div>
-                                <div class="col-salary">Monthly Salary</div>
                                 <div class="col-status">Attendance Status</div>
                                 <div class="col-time">Time Details</div>
                                 <div class="col-actions">Actions</div>
                             </div>
-                            <div class="grid-body" id="attendanceGridBody">
+                            <div class="grid-body" id="attendanceGridBody" style="max-height: 400px; overflow-y: auto;">
                                 ${this.renderAttendanceGrid(today, todaysRecords)}
                             </div>
                         </div>
@@ -196,7 +195,6 @@ class AttendanceManager {
         return this.employees.map(employee => {
             const todayRecord = todaysRecords.find(r => r.employee_id === employee.id);
             const currentStatus = todayRecord?.status || '';
-            const monthlySalary = this.formatSalary(employee.monthly_salary || employee.salary || 0);
 
             return `
                 <div class="attendance-row" data-employee-id="${employee.id}">
@@ -213,10 +211,6 @@ class AttendanceManager {
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="col-salary">
-                        <div class="salary-amount">${monthlySalary}</div>
                     </div>
 
                     <div class="col-status">
@@ -255,17 +249,11 @@ class AttendanceManager {
                                        value="${todayRecord?.check_out_time || '18:00'}" 
                                        ${currentStatus === 'absent' ? 'disabled' : ''}>
                             </div>
-                            <div class="hours-display">
-                                <span class="hours">${this.calculateWorkHours(
-                todayRecord?.check_in_time || '09:00',
-                todayRecord?.check_out_time || '18:00'
-            ).toFixed(1)}h</span>
-                            </div>
                         </div>
                     </div>
 
                     <div class="col-actions">
-                        <button type="button" class="btn-sm btn-clear" onclick="this.clearEmployeeAttendance('${employee.id}')">
+                        <button type="button" class="btn-sm btn-clear" onclick="app.getManagers().attendance.clearEmployeeAttendance('${employee.id}')">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -309,7 +297,14 @@ class AttendanceManager {
             if (e.target.classList.contains('time-input')) {
                 const row = e.target.closest('.attendance-row');
                 const employeeId = row.getAttribute('data-employee-id');
-                this.updateEmployeeHours(employeeId);
+                this.updateEmployeeTime(employeeId);
+            }
+        });
+
+        // Close modal with escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.hideModal('quickAttendanceModal');
             }
         });
     }
@@ -351,7 +346,6 @@ class AttendanceManager {
             }
         });
 
-        this.updateEmployeeHours(employeeId);
         this.updateAttendanceStats();
     }
 
@@ -370,24 +364,12 @@ class AttendanceManager {
             if (input.classList.contains('check-out')) input.value = '18:00';
         });
 
-        this.updateEmployeeHours(employeeId);
         this.updateAttendanceStats();
     }
 
-    updateEmployeeHours(employeeId) {
-        const row = document.querySelector(`.attendance-row[data-employee-id="${employeeId}"]`);
-        if (!row) return;
-
-        const checkIn = row.querySelector('.check-in').value;
-        const checkOut = row.querySelector('.check-out').value;
-        const hoursDisplay = row.querySelector('.hours');
-
-        if (checkIn && checkOut) {
-            const hours = this.calculateWorkHours(checkIn, checkOut);
-            hoursDisplay.textContent = `${hours.toFixed(1)}h`;
-        } else {
-            hoursDisplay.textContent = '0h';
-        }
+    updateEmployeeTime(employeeId) {
+        // Just update stats when time changes
+        this.updateAttendanceStats();
     }
 
     updateAttendanceStats() {
@@ -423,11 +405,29 @@ class AttendanceManager {
             const employeeId = row.getAttribute('data-employee-id');
             const activeStatus = row.querySelector('.status-option.active');
 
-            if (!activeStatus) return;
+            if (!activeStatus) {
+                const employee = this.getEmployeeById(employeeId);
+                errors.push(`${employee?.name}: No attendance status selected`);
+                return;
+            }
 
             const status = activeStatus.getAttribute('data-status');
             const checkInTime = row.querySelector('.check-in').value;
             const checkOutTime = row.querySelector('.check-out').value;
+
+            // Validate time inputs for non-absent status
+            if (status !== 'absent') {
+                if (!checkInTime) {
+                    const employee = this.getEmployeeById(employeeId);
+                    errors.push(`${employee?.name}: Check-in time required`);
+                    return;
+                }
+                if (!checkOutTime) {
+                    const employee = this.getEmployeeById(employeeId);
+                    errors.push(`${employee?.name}: Check-out time required`);
+                    return;
+                }
+            }
 
             const recordData = {
                 employee_id: employeeId,
@@ -435,44 +435,49 @@ class AttendanceManager {
                 status: status,
                 check_in_time: status === 'absent' ? null : (checkInTime || null),
                 check_out_time: status === 'absent' ? null : (checkOutTime || null),
-                working_hours: status === 'absent' ? 0 : this.calculateWorkHours(checkInTime, checkOutTime),
-                overtime_hours: 0
+                notes: ''
             };
-
-            const validationErrors = this.validateAttendanceData(recordData);
-            if (validationErrors.length > 0) {
-                const employee = this.getEmployeeById(employeeId);
-                errors.push(`${employee?.name}: ${validationErrors.join(', ')}`);
-                return;
-            }
 
             attendanceData.push(recordData);
         });
-
-        if (attendanceData.length === 0) {
-            this.ui.showToast('No attendance data to save', 'warning');
-            return;
-        }
 
         if (errors.length > 0) {
             this.ui.showToast(`Please fix errors: ${errors.join('; ')}`, 'error');
             return;
         }
 
+        if (attendanceData.length === 0) {
+            this.ui.showToast('No attendance data to save', 'warning');
+            return;
+        }
+
         try {
             this.ui.showLoading('Saving attendance...');
 
-            // Save records in parallel for better performance
-            await Promise.all(
-                attendanceData.map(record => this.markAttendance(record))
-            );
+            // Save records sequentially to avoid database conflicts
+            const results = [];
+            for (const record of attendanceData) {
+                try {
+                    const result = await this.markAttendance(record);
+                    results.push(result);
+                } catch (error) {
+                    console.error(`Failed to save attendance for employee ${record.employee_id}:`, error);
+                    const employee = this.getEmployeeById(record.employee_id);
+                    errors.push(`${employee?.name}: ${error.message}`);
+                }
+            }
 
             this.ui.hideLoading();
-            this.hideModal('quickAttendanceModal');
-            this.ui.showToast(`✅ Attendance saved for ${attendanceData.length} employees`, 'success');
 
-            // Refresh data
-            await this.refreshAttendanceData();
+            if (errors.length > 0) {
+                this.ui.showToast(`Some records failed: ${errors.join('; ')}`, 'error');
+            } else {
+                this.hideModal('quickAttendanceModal');
+                this.ui.showToast(`✅ Attendance saved for ${results.length} employees`, 'success');
+                
+                // Refresh data
+                await this.refreshAttendanceData();
+            }
 
         } catch (error) {
             this.ui.hideLoading();
@@ -496,9 +501,7 @@ class AttendanceManager {
                 status: attendanceData.status,
                 check_in_time: attendanceData.check_in_time || null,
                 check_out_time: attendanceData.check_out_time || null,
-                working_hours: attendanceData.working_hours || 0,
-                overtime_hours: attendanceData.overtime_hours || 0,
-                notes: attendanceData.notes || null
+                notes: attendanceData.notes || ''
             };
 
             // Check for existing record
@@ -509,20 +512,27 @@ class AttendanceManager {
 
             let result;
             if (existing && existing.length > 0) {
-                // Update existing
+                // Update existing record
                 const existingRecord = existing[0];
                 if (this.db.updateAttendanceRecord) {
                     result = await this.db.updateAttendanceRecord(existingRecord.id, recordToSave);
                 } else {
                     result = await this.db.update('attendance', existingRecord.id, recordToSave);
                 }
+                console.log('📝 Updated attendance record:', result);
             } else {
-                // Create new
+                // Create new record - FIXED: Generate ID for Supabase
+                const recordWithId = {
+                    ...recordToSave,
+                    id: this.generateId()
+                };
+                
                 if (this.db.createAttendanceRecord) {
-                    result = await this.db.createAttendanceRecord(recordToSave);
+                    result = await this.db.createAttendanceRecord(recordWithId);
                 } else {
-                    result = await this.db.create('attendance', recordToSave);
+                    result = await this.db.create('attendance', recordWithId);
                 }
+                console.log('📝 Created attendance record:', result);
             }
 
             return result;
@@ -595,8 +605,10 @@ class AttendanceManager {
             errors.push('Invalid status');
         }
 
-        if (data.working_hours && (data.working_hours < 0 || data.working_hours > 24)) {
-            errors.push('Invalid working hours');
+        // Validate time for non-absent status
+        if (data.status !== 'absent') {
+            if (!data.check_in_time) errors.push('Check-in time required');
+            if (!data.check_out_time) errors.push('Check-out time required');
         }
 
         return errors;
@@ -645,10 +657,13 @@ class AttendanceManager {
             );
         }
 
+        // Sort by date descending
+        filteredRecords.sort((a, b) => new Date(b.attendance_date) - new Date(a.attendance_date));
+
         if (filteredRecords.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="10" class="no-data">
+                    <td colspan="8" class="no-data">
                         <i class="fas fa-calendar-day"></i>
                         <br>No attendance records found
                     </td>
@@ -673,8 +688,6 @@ class AttendanceManager {
                     </td>
                     <td>${record.check_in_time || '-'}</td>
                     <td>${record.check_out_time || '-'}</td>
-                    <td>${record.working_hours || '0'} hrs</td>
-                    <td>${record.overtime_hours || '0'} hrs</td>
                     <td>${record.notes || '-'}</td>
                     <td>
                         <button class="btn-secondary btn-sm" onclick="app.getManagers().attendance.deleteAttendance('${record.id}')">
@@ -688,36 +701,8 @@ class AttendanceManager {
 
     // ==================== UTILITIES ====================
 
-    calculateWorkHours(checkInTime, checkOutTime) {
-        if (!checkInTime || !checkOutTime) return 0;
-
-        try {
-            const [inHours, inMinutes] = checkInTime.split(':').map(Number);
-            const [outHours, outMinutes] = checkOutTime.split(':').map(Number);
-
-            const checkIn = new Date();
-            checkIn.setHours(inHours, inMinutes, 0, 0);
-
-            const checkOut = new Date();
-            checkOut.setHours(outHours, outMinutes, 0, 0);
-
-            if (checkOut < checkIn) {
-                checkOut.setDate(checkOut.getDate() + 1);
-            }
-
-            const diffMs = checkOut - checkIn;
-            const diffHours = diffMs / (1000 * 60 * 60);
-
-            return Math.max(0, Math.min(24, diffHours));
-        } catch (error) {
-            console.error('Error calculating work hours:', error);
-            return 0;
-        }
-    }
-
-    formatSalary(amount) {
-        if (!amount) return '₹0';
-        return '₹' + parseInt(amount).toLocaleString('en-IN');
+    generateId() {
+        return 'ATT' + Date.now() + Math.random().toString(36).substr(2, 9);
     }
 
     formatDate(dateString) {
@@ -866,13 +851,19 @@ class AttendanceManager {
 
 // CSS Styles (optimized)
 const attendanceCSS = `
-.attendance-container { padding: 1rem; }
+.attendance-container { 
+    padding: 1rem; 
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
 
 .attendance-stats {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 1rem;
     margin-bottom: 1.5rem;
+    flex-shrink: 0;
 }
 
 .stat-card {
@@ -901,25 +892,43 @@ const attendanceCSS = `
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     margin-bottom: 1.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .grid-header {
     display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr 2fr 0.5fr;
+    grid-template-columns: 2fr 1.5fr 2fr 0.5fr;
     background: #2c3e50;
     color: white;
     padding: 1rem;
     font-weight: 600;
     gap: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-shrink: 0;
+}
+
+.grid-body {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 400px;
 }
 
 .attendance-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr 2fr 0.5fr;
+    grid-template-columns: 2fr 1.5fr 2fr 0.5fr;
     padding: 1rem;
     border-bottom: 1px solid #e9ecef;
     gap: 1rem;
     align-items: center;
+    transition: background-color 0.2s;
+}
+
+.attendance-row:hover {
+    background-color: #f8f9fa;
 }
 
 .employee-info-compact {
@@ -937,6 +946,7 @@ const attendanceCSS = `
     align-items: center;
     justify-content: center;
     color: white;
+    flex-shrink: 0;
 }
 
 .status-options {
@@ -956,6 +966,12 @@ const attendanceCSS = `
     align-items: center;
     gap: 0.5rem;
     font-size: 0.85rem;
+    border: 2px solid transparent;
+}
+
+.status-option:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .status-option.present.active {
@@ -1000,14 +1016,19 @@ const attendanceCSS = `
     border-radius: 4px;
     font-size: 0.85rem;
     width: 90px;
+    transition: border-color 0.2s;
 }
 
-.hours-display {
-    padding: 0.4rem 0.75rem;
-    background: #f8f9fa;
-    border-radius: 4px;
-    font-weight: 600;
-    color: #495057;
+.time-input:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.time-input:disabled {
+    background-color: #e9ecef;
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .attendance-actions {
@@ -1015,6 +1036,9 @@ const attendanceCSS = `
     justify-content: space-between;
     align-items: center;
     padding: 1rem 0;
+    border-top: 1px solid #e9ecef;
+    margin-top: 1rem;
+    flex-shrink: 0;
 }
 
 .header-actions {
@@ -1029,6 +1053,13 @@ const attendanceCSS = `
     font-size: 1.5rem;
     cursor: pointer;
     color: #6c757d;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.btn-close:hover {
+    background-color: rgba(0,0,0,0.1);
 }
 
 .status-badge {
@@ -1044,16 +1075,19 @@ const attendanceCSS = `
 .status-present {
     background: #d4edda;
     color: #155724;
+    border: 1px solid #c3e6cb;
 }
 
 .status-absent {
     background: #f8d7da;
     color: #721c24;
+    border: 1px solid #f5c6cb;
 }
 
 .status-half-day {
     background: #fff3cd;
     color: #856404;
+    border: 1px solid #ffeaa7;
 }
 
 .modal {
@@ -1067,6 +1101,7 @@ const attendanceCSS = `
     z-index: 1000;
     opacity: 0;
     transition: opacity 0.3s;
+    backdrop-filter: blur(2px);
 }
 
 .modal.active {
@@ -1078,12 +1113,15 @@ const attendanceCSS = `
 
 .modal-content {
     background: white;
-    border-radius: 8px;
+    border-radius: 12px;
     max-width: 90%;
     max-height: 90%;
-    overflow: auto;
+    overflow: hidden;
     transform: scale(0.9);
     transition: transform 0.3s;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
 }
 
 .modal.active .modal-content {
@@ -1096,6 +1134,16 @@ const attendanceCSS = `
     align-items: center;
     padding: 1.5rem;
     border-bottom: 1px solid #e9ecef;
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .no-data {
@@ -1111,12 +1159,86 @@ const attendanceCSS = `
     opacity: 0.5;
 }
 
+.btn-primary, .btn-secondary, .btn-sm {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0056b3;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #545b62;
+    transform: translateY(-1px);
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.btn-clear {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-clear:hover {
+    background: #c82333;
+}
+
 @media (max-width: 768px) {
-    .attendance-stats { grid-template-columns: repeat(2, 1fr); }
-    .employee-attendance-grid { overflow-x: auto; }
-    .grid-header, .attendance-row { min-width: 1000px; }
-    .time-inputs { flex-direction: column; }
-    .time-input { width: 100%; }
+    .attendance-stats { 
+        grid-template-columns: repeat(2, 1fr); 
+    }
+    
+    .employee-attendance-grid { 
+        overflow-x: auto; 
+    }
+    
+    .grid-header, .attendance-row { 
+        min-width: 800px; 
+    }
+    
+    .time-inputs { 
+        flex-direction: column; 
+    }
+    
+    .time-input { 
+        width: 100%; 
+    }
+    
+    .modal-content {
+        max-width: 95%;
+        max-height: 95%;
+    }
+    
+    .header-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .grid-body {
+        max-height: 300px;
+    }
 }
 `;
 

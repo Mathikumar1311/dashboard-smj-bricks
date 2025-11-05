@@ -5,14 +5,19 @@ class CustomerManager {
         if (!dependencies.db) throw new Error('CustomerManager: db required');
         if (!dependencies.ui) throw new Error('CustomerManager: ui required');
         if (!dependencies.auth) throw new Error('CustomerManager: auth required');
-
+        
         // ✅ ASSIGN DEPENDENCIES
         this.db = dependencies.db;
         this.ui = dependencies.ui;
         this.auth = dependencies.auth;
+        this.Utils = dependencies.utils || this.createFallbackUtils();
+        
+        if (!this.Utils) {
+            console.warn('⚠️ Utils not provided, using fallback implementation');
+        }
 
         // ✅ CUSTOMER DATA
-        this.employees = []; // ADD THIS LINE
+        this.employees = [];
         this.customers = [];
         this.advancePayments = [];
         this.bills = []; // For balance calculations
@@ -28,6 +33,126 @@ class CustomerManager {
         console.log('✅ CustomerManager initialized');
     }
 
+    // ==================== FALLBACK UTILS ====================
+
+    createFallbackUtils() {
+        console.warn('⚠️ Creating fallback Utils for CustomerManager');
+        return {
+            generateId: () => 'id_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now().toString(36),
+            formatCurrency: (amount) => {
+                if (amount === null || amount === undefined) return '₹0.00';
+                return '₹' + parseFloat(amount).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+            },
+            formatDate: (dateString) => {
+                if (!dateString) return 'N/A';
+                try {
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString('en-IN', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                } catch (e) {
+                    return dateString;
+                }
+            },
+            validatePhone: (phone) => {
+                const phoneRegex = /^[6-9]\d{9}$/;
+                return phoneRegex.test(phone.replace(/\D/g, ''));
+            },
+            validateEmail: (email) => {
+                if (!email) return true;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(email);
+            },
+            sanitizeInput: (input) => {
+                if (typeof input !== 'string') return input;
+                return input
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#x27;')
+                    .replace(/\//g, '&#x2F;');
+            },
+            exportToExcel: (data, filename) => {
+                try {
+                    let csvContent = "data:text/csv;charset=utf-8,";
+                    const headers = Object.keys(data[0] || {});
+                    csvContent += headers.join(',') + '\n';
+                    
+                    data.forEach(row => {
+                        const values = headers.map(header => {
+                            let value = row[header] || '';
+                            if (typeof value === 'string' && value.includes(',')) {
+                                value = `"${value}"`;
+                            }
+                            return value;
+                        });
+                        csvContent += values.join(',') + '\n';
+                    });
+                    
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement('a');
+                    link.setAttribute('href', encodedUri);
+                    link.setAttribute('download', `${filename}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch (error) {
+                    console.error('Error exporting to Excel:', error);
+                    throw error;
+                }
+            },
+            exportToPDF: async (data, filename, title) => {
+                try {
+                    let textContent = `${title}\n\n`;
+                    const headers = Object.keys(data[0] || {});
+                    
+                    textContent += headers.join('\t') + '\n';
+                    data.forEach(row => {
+                        const values = headers.map(header => row[header] || '');
+                        textContent += values.join('\t') + '\n';
+                    });
+                    
+                    const blob = new Blob([textContent], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${filename}.txt`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    console.error('Error exporting to PDF:', error);
+                    throw error;
+                }
+            }
+        };
+    }
+
+    // ==================== PERMISSION METHODS ====================
+
+    hasPermission(requiredPermission) {
+        return this.auth.hasPermission(requiredPermission);
+    }
+
+    getCurrentUser() {
+        return this.auth.getCurrentUser();
+    }
+
+    canPerformAction(action) {
+        const user = this.getCurrentUser();
+        if (!user) return false;
+
+        const permissions = {
+            'admin': ['create', 'edit', 'delete', 'view', 'export'],
+            'supervisor': ['create', 'edit', 'view', 'export'],
+            'user': ['view']
+        };
+
+        const userPermissions = permissions[user.role] || permissions['user'];
+        return userPermissions.includes(action);
+    }
+
     // ==================== INITIALIZATION ====================
 
     async initialize() {
@@ -39,7 +164,7 @@ class CustomerManager {
 
     async loadCustomers() {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('view')) {
                 return;
             }
 
@@ -118,7 +243,7 @@ class CustomerManager {
     // ==================== CUSTOMER MANAGEMENT ====================
 
     showAddCustomerModal() {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('create')) {
             this.ui.showToast('Insufficient permissions to manage customers', 'error');
             return;
         }
@@ -130,7 +255,7 @@ class CustomerManager {
     }
 
     async editCustomer(customerId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('edit')) {
             this.ui.showToast('Insufficient permissions to edit customers', 'error');
             return;
         }
@@ -159,7 +284,7 @@ class CustomerManager {
     async handleCustomerSubmit(e) {
         e.preventDefault();
 
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('create') && !this.canPerformAction('edit')) {
             this.ui.showToast('Insufficient permissions to manage customers', 'error');
             return;
         }
@@ -181,12 +306,12 @@ class CustomerManager {
             return;
         }
 
-        if (!Utils.validatePhone(phone)) {
+        if (!this.Utils.validatePhone(phone)) {
             this.ui.showToast('Please enter a valid 10-digit phone number', 'error');
             return;
         }
 
-        if (email && !Utils.validateEmail(email)) {
+        if (email && !this.Utils.validateEmail(email)) {
             this.ui.showToast('Please enter a valid email address', 'error');
             return;
         }
@@ -204,12 +329,14 @@ class CustomerManager {
         const resetButton = this.ui.showButtonLoading(button, 'Saving...');
 
         try {
+            const currentUser = this.getCurrentUser();
             const customerData = {
-                name: Utils.sanitizeInput(name),
-                phone: Utils.sanitizeInput(phone),
-                email: email ? Utils.sanitizeInput(email) : null,
-                address: address ? Utils.sanitizeInput(address) : null,
-                updated_at: new Date().toISOString()
+                name: this.Utils.sanitizeInput(name),
+                phone: this.Utils.sanitizeInput(phone),
+                email: email ? this.Utils.sanitizeInput(email) : null,
+                address: address ? this.Utils.sanitizeInput(address) : null,
+                updated_at: new Date().toISOString(),
+                updated_by: currentUser?.id || 'system'
             };
 
             if (customerId) {
@@ -220,6 +347,7 @@ class CustomerManager {
                 // Create new customer
                 customerData.id = `CUST_${Date.now()}`;
                 customerData.created_at = new Date().toISOString();
+                customerData.created_by = currentUser?.id || 'system';
                 await this.db.create('customers', customerData);
                 this.ui.showToast('Customer created successfully', 'success');
             }
@@ -286,11 +414,11 @@ class CustomerManager {
                             </div>
                             <div class="detail-row">
                                 <label>Total Advance:</label>
-                                <span style="color: #10b981;">${Utils.formatCurrency(totalAdvance)}</span>
+                                <span style="color: #10b981;">${this.Utils.formatCurrency(totalAdvance)}</span>
                             </div>
                             <div class="detail-row">
                                 <label>Pending Bills:</label>
-                                <span style="color: #ef4444;">${Utils.formatCurrency(totalPending)}</span>
+                                <span style="color: #ef4444;">${this.Utils.formatCurrency(totalPending)}</span>
                             </div>
                             <div class="detail-row">
                                 <label>Current Balance:</label>
@@ -299,15 +427,19 @@ class CustomerManager {
                         </div>
 
                         <div class="customer-actions" style="margin: 1.5rem 0; display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button class="btn-primary" id="addSaleBtn">
-                                <i class="fas fa-plus"></i> Add New Sale
-                            </button>
-                            <button class="btn-secondary" id="addAdvanceBtn">
-                                <i class="fas fa-money-bill-wave"></i> Add Advance
-                            </button>
-                            <button class="btn-secondary" id="editCustomerBtn">
-                                <i class="fas fa-edit"></i> Edit Customer
-                            </button>
+                            ${this.canPerformAction('create') ? `
+                                <button class="btn-primary" id="addSaleBtn">
+                                    <i class="fas fa-plus"></i> Add New Sale
+                                </button>
+                                <button class="btn-secondary" id="addAdvanceBtn">
+                                    <i class="fas fa-money-bill-wave"></i> Add Advance
+                                </button>
+                            ` : ''}
+                            ${this.canPerformAction('edit') ? `
+                                <button class="btn-secondary" id="editCustomerBtn">
+                                    <i class="fas fa-edit"></i> Edit Customer
+                                </button>
+                            ` : ''}
                         </div>
 
                         <!-- Advance Payments Section -->
@@ -319,8 +451,8 @@ class CustomerManager {
                                     ${customerAdvances.map(advance => `
                                         <div class="advance-item">
                                             <div class="advance-info">
-                                                <strong>${Utils.formatCurrency(advance.amount)}</strong>
-                                                <span>${Utils.formatDate(advance.payment_date)}</span>
+                                                <strong>${this.Utils.formatCurrency(advance.amount)}</strong>
+                                                <span>${this.Utils.formatDate(advance.payment_date)}</span>
                                             </div>
                                             <div class="advance-notes">
                                                 ${advance.notes || 'No notes'}
@@ -341,10 +473,10 @@ class CustomerManager {
                                         <div class="bill-item-summary">
                                             <div class="bill-info">
                                                 <strong>${bill.bill_number}</strong>
-                                                <span>${Utils.formatDate(bill.bill_date)}</span>
+                                                <span>${this.Utils.formatDate(bill.bill_date)}</span>
                                             </div>
                                             <div class="bill-amount">
-                                                ${Utils.formatCurrency(bill.total_amount)}
+                                                ${this.Utils.formatCurrency(bill.total_amount)}
                                                 <span class="status-${bill.status}">${bill.status}</span>
                                             </div>
                                             <div class="bill-actions">
@@ -427,6 +559,11 @@ class CustomerManager {
     // ==================== ADVANCE PAYMENT MANAGEMENT ====================
 
     showAddAdvanceModal(customerId) {
+        if (!this.canPerformAction('create')) {
+            this.ui.showToast('Insufficient permissions to add advance payments', 'error');
+            return;
+        }
+
         const customer = this.customers.find(c => c.id === customerId);
         if (!customer) {
             this.ui.showToast('Customer not found', 'error');
@@ -532,6 +669,7 @@ class CustomerManager {
                 return;
             }
 
+            const currentUser = this.getCurrentUser();
             const advanceData = {
                 customer_id: customer.id,
                 customer_name: customer.name,
@@ -539,8 +677,9 @@ class CustomerManager {
                 amount: amount,
                 payment_date: paymentDate,
                 payment_method: paymentMethod,
-                notes: notes ? Utils.sanitizeInput(notes) : null,
-                created_at: new Date().toISOString()
+                notes: notes ? this.Utils.sanitizeInput(notes) : null,
+                created_at: new Date().toISOString(),
+                created_by: currentUser?.id || 'system'
             };
 
             advanceData.id = `ADV_${customer.id}_${Date.now()}`;
@@ -692,12 +831,16 @@ class CustomerManager {
                         <button class="btn-icon" onclick="app.getManagers().customer.showCustomerDetails('${customer.id}')" title="View Details">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <button class="btn-icon" onclick="app.getManagers().customer.editCustomer('${customer.id}')" title="Edit Customer">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn-icon btn-danger" onclick="app.getManagers().customer.deleteCustomer('${customer.id}')" title="Delete Customer">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        ${this.canPerformAction('edit') ? `
+                            <button class="btn-icon" onclick="app.getManagers().customer.editCustomer('${customer.id}')" title="Edit Customer">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        ` : ''}
+                        ${this.canPerformAction('delete') ? `
+                            <button class="btn-icon btn-danger" onclick="app.getManagers().customer.deleteCustomer('${customer.id}')" title="Delete Customer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </td>
             </tr>
@@ -726,11 +869,15 @@ class CustomerManager {
         const isPositive = balance >= 0;
         const color = isPositive ? '#10b981' : '#ef4444';
         const sign = isPositive ? '+' : '';
-        return `<span style="color: ${color}; font-weight: bold;">${sign}${Utils.formatCurrency(balance)}</span>`;
+        return `<span style="color: ${color}; font-weight: bold;">${sign}${this.Utils.formatCurrency(balance)}</span>`;
     }
 
     findCustomerByPhone(phone) {
         return this.customers.find(customer => customer.phone === phone);
+    }
+
+    updateBillsData(bills) {
+        this.bills = bills || [];
     }
 
     // ==================== MODAL MANAGEMENT ====================
@@ -748,7 +895,7 @@ class CustomerManager {
     // ==================== DELETE CUSTOMER ====================
 
     async deleteCustomer(customerId) {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+        if (!this.canPerformAction('delete')) {
             this.ui.showToast('Insufficient permissions to delete customers', 'error');
             return;
         }
@@ -850,6 +997,11 @@ class CustomerManager {
     // ==================== EXPORT METHODS ====================
 
     showExportOptions() {
+        if (!this.canPerformAction('export')) {
+            this.ui.showToast('Insufficient permissions to export customers', 'error');
+            return;
+        }
+
         const exportHtml = `
             <div id="exportModal" class="modal">
                 <div class="modal-content" style="max-width: 500px;">
@@ -918,7 +1070,7 @@ class CustomerManager {
 
     async exportCustomers(format = 'excel') {
         try {
-            if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('supervisor')) {
+            if (!this.canPerformAction('export')) {
                 this.ui.showToast('Insufficient permissions to export customers', 'error');
                 return;
             }
@@ -942,7 +1094,7 @@ class CustomerManager {
                     'Total Bills': customerBills.length,
                     'Pending Bills': customerBills.filter(b => b.status === 'pending').length,
                     'Balance': balance,
-                    'Created Date': Utils.formatDate(customer.created_at)
+                    'Created Date': this.Utils.formatDate(customer.created_at)
                 };
             });
 
@@ -953,13 +1105,13 @@ class CustomerManager {
                 if (window.exportManager) {
                     await window.exportManager.exportToPDF(exportData, filename, title);
                 } else {
-                    await Utils.exportToPDF(exportData, filename, title);
+                    await this.Utils.exportToPDF(exportData, filename, title);
                 }
             } else {
                 if (window.exportManager) {
                     await window.exportManager.exportToExcel(exportData, filename, title);
                 } else {
-                    Utils.exportToExcel(exportData, filename);
+                    this.Utils.exportToExcel(exportData, filename);
                 }
             }
 
@@ -973,10 +1125,6 @@ class CustomerManager {
     }
 
     // ==================== DATA SYNC METHODS ====================
-
-    updateBillsData(bills) {
-        this.bills = bills || [];
-    }
 
     async refreshCustomerData() {
         await this.loadCustomers();

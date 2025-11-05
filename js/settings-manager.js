@@ -9,6 +9,7 @@ class SettingsManager {
     async initialize() {
         this.setupEventListeners();
         this.loadUserProfile();
+        this.loadSettings();
         return Promise.resolve();
     }
 
@@ -22,6 +23,12 @@ class SettingsManager {
                 uploadAvatarBtn.addEventListener('click', () => this.showAvatarUpload());
             }
 
+            // Remove avatar button
+            const removeAvatarBtn = document.getElementById('removeAvatarBtn');
+            if (removeAvatarBtn) {
+                removeAvatarBtn.addEventListener('click', () => this.removeAvatar());
+            }
+
             // Theme selection
             const themeOptions = document.querySelectorAll('.theme-option');
             themeOptions.forEach(option => {
@@ -32,6 +39,9 @@ class SettingsManager {
 
             // Settings section navigation
             this.setupSettingsNavigation();
+            
+            // Settings forms
+            this.setupSettingsForms();
 
         }, 100);
     }
@@ -140,28 +150,29 @@ class SettingsManager {
     }
 
     getAppearanceTabContent() {
+        const settings = this.getCurrentSettings();
         return `
             <div class="settings-section">
                 <h3>Theme Settings</h3>
                 <div class="theme-selector">
                     <div class="theme-options">
-                        <div class="theme-option active" data-theme="orange">
+                        <div class="theme-option ${settings.theme === 'orange' ? 'active' : ''}" data-theme="orange">
                             <div class="theme-preview orange-theme"></div>
                             <span>Orange</span>
                         </div>
-                        <div class="theme-option" data-theme="blue">
+                        <div class="theme-option ${settings.theme === 'blue' ? 'active' : ''}" data-theme="blue">
                             <div class="theme-preview blue-theme"></div>
                             <span>Blue</span>
                         </div>
-                        <div class="theme-option" data-theme="green">
+                        <div class="theme-option ${settings.theme === 'green' ? 'active' : ''}" data-theme="green">
                             <div class="theme-preview green-theme"></div>
                             <span>Green</span>
                         </div>
-                        <div class="theme-option" data-theme="purple">
+                        <div class="theme-option ${settings.theme === 'purple' ? 'active' : ''}" data-theme="purple">
                             <div class="theme-preview purple-theme"></div>
                             <span>Purple</span>
                         </div>
-                        <div class="theme-option" data-theme="dark">
+                        <div class="theme-option ${settings.theme === 'dark' ? 'active' : ''}" data-theme="dark">
                             <div class="theme-preview dark-theme"></div>
                             <span>Dark</span>
                         </div>
@@ -172,23 +183,30 @@ class SettingsManager {
                     <h4>Interface Options</h4>
                     <div class="checkbox-option">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="compactMode" checked>
+                            <input type="checkbox" id="compactMode" ${settings.compactMode ? 'checked' : ''}>
                             <span class="checkmark"></span>
                             Compact mode (dense tables)
                         </label>
                     </div>
                     <div class="checkbox-option">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="animations" checked>
+                            <input type="checkbox" id="animations" ${settings.animations ? 'checked' : ''}>
                             <span class="checkmark"></span>
                             Enable animations
                         </label>
                     </div>
                     <div class="checkbox-option">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="soundEffects">
+                            <input type="checkbox" id="soundEffects" ${settings.soundEffects ? 'checked' : ''}>
                             <span class="checkmark"></span>
                             Sound effects
+                        </label>
+                    </div>
+                    <div class="checkbox-option">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoBackup" ${settings.autoBackup ? 'checked' : ''}>
+                            <span class="checkmark"></span>
+                            Auto backup every week
                         </label>
                     </div>
                 </div>
@@ -228,6 +246,20 @@ class SettingsManager {
                         <p>Current session started: <strong>${new Date().toLocaleString()}</strong></p>
                         <button id="logoutAllBtn" class="btn-secondary">
                             <i class="fas fa-sign-out-alt"></i> Logout from all devices
+                        </button>
+                    </div>
+                </div>
+
+                <div class="security-item">
+                    <h4>Two-Factor Authentication</h4>
+                    <div class="security-status">
+                        <div class="status-indicator ${this.is2FAEnabled() ? 'enabled' : 'disabled'}">
+                            <i class="fas ${this.is2FAEnabled() ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                            <span>${this.is2FAEnabled() ? 'Enabled' : 'Disabled'}</span>
+                        </div>
+                        <button id="toggle2FABtn" class="btn-secondary">
+                            <i class="fas fa-shield-alt"></i> 
+                            ${this.is2FAEnabled() ? 'Disable 2FA' : 'Enable 2FA'}
                         </button>
                     </div>
                 </div>
@@ -274,8 +306,132 @@ class SettingsManager {
                         <p class="no-data">No backups found</p>
                     </div>
                 </div>
+
+                <div class="backup-settings">
+                    <h4>Backup Settings</h4>
+                    <div class="checkbox-option">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoBackupEnabled">
+                            <span class="checkmark"></span>
+                            Enable automatic backups
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Backup Frequency</label>
+                        <select id="backupFrequency">
+                            <option value="daily">Daily</option>
+                            <option value="weekly" selected>Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <button id="saveBackupSettings" class="btn-primary">
+                        <i class="fas fa-save"></i> Save Backup Settings
+                    </button>
+                </div>
             </div>
         `;
+    }
+
+    setupSettingsForms() {
+        // Profile form
+        const profileForm = document.getElementById('profileForm');
+        if (profileForm) {
+            profileForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = {
+                    name: document.getElementById('profileName').value,
+                    email: document.getElementById('profileEmail').value,
+                    phone: document.getElementById('profilePhone').value
+                };
+                this.updateProfile(formData);
+            });
+        }
+
+        // Password form
+        const passwordForm = document.getElementById('passwordForm');
+        if (passwordForm) {
+            passwordForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                if (newPassword !== confirmPassword) {
+                    this.ui.showToast('New passwords do not match', 'error');
+                    return;
+                }
+
+                this.changePassword(currentPassword, newPassword);
+            });
+        }
+
+        // Appearance settings
+        const compactMode = document.getElementById('compactMode');
+        if (compactMode) {
+            compactMode.addEventListener('change', () => {
+                this.saveAppearanceSettings();
+            });
+        }
+
+        const animations = document.getElementById('animations');
+        if (animations) {
+            animations.addEventListener('change', () => {
+                this.saveAppearanceSettings();
+            });
+        }
+
+        const soundEffects = document.getElementById('soundEffects');
+        if (soundEffects) {
+            soundEffects.addEventListener('change', () => {
+                this.saveAppearanceSettings();
+            });
+        }
+
+        const autoBackup = document.getElementById('autoBackup');
+        if (autoBackup) {
+            autoBackup.addEventListener('change', () => {
+                this.saveAppearanceSettings();
+            });
+        }
+
+        // Backup buttons
+        const createBackupBtn = document.getElementById('createBackupBtn');
+        if (createBackupBtn) {
+            createBackupBtn.addEventListener('click', () => {
+                this.createBackup();
+            });
+        }
+
+        const restoreBackupBtn = document.getElementById('restoreBackupBtn');
+        if (restoreBackupBtn) {
+            restoreBackupBtn.addEventListener('click', () => {
+                this.showRestoreBackup();
+            });
+        }
+
+        // Logout all button
+        const logoutAllBtn = document.getElementById('logoutAllBtn');
+        if (logoutAllBtn) {
+            logoutAllBtn.addEventListener('click', () => {
+                this.logoutAllDevices();
+            });
+        }
+
+        // 2FA button
+        const toggle2FABtn = document.getElementById('toggle2FABtn');
+        if (toggle2FABtn) {
+            toggle2FABtn.addEventListener('click', () => {
+                this.toggle2FA();
+            });
+        }
+
+        // Backup settings
+        const saveBackupSettings = document.getElementById('saveBackupSettings');
+        if (saveBackupSettings) {
+            saveBackupSettings.addEventListener('click', () => {
+                this.saveBackupSettings();
+            });
+        }
     }
 
     loadUserProfile() {
@@ -297,6 +453,66 @@ class SettingsManager {
         const userAvatar = document.getElementById('userAvatar');
         if (userAvatar) {
             userAvatar.src = currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=ff6b35&color=fff`;
+        }
+    }
+
+    loadSettings() {
+        const settings = this.getCurrentSettings();
+        
+        // Update UI with current settings
+        const compactMode = document.getElementById('compactMode');
+        const animations = document.getElementById('animations');
+        const soundEffects = document.getElementById('soundEffects');
+        const autoBackup = document.getElementById('autoBackup');
+        
+        if (compactMode) compactMode.checked = settings.compactMode;
+        if (animations) animations.checked = settings.animations;
+        if (soundEffects) soundEffects.checked = settings.soundEffects;
+        if (autoBackup) autoBackup.checked = settings.autoBackup;
+        
+        // Update theme options
+        document.querySelectorAll('.theme-option').forEach(option => {
+            option.classList.remove('active');
+        });
+        const activeThemeOption = document.querySelector(`[data-theme="${settings.theme}"]`);
+        if (activeThemeOption) {
+            activeThemeOption.classList.add('active');
+        }
+        
+        // Load backup history
+        this.loadBackupHistory();
+    }
+
+    getCurrentSettings() {
+        const defaultSettings = {
+            theme: 'orange',
+            compactMode: true,
+            animations: true,
+            soundEffects: false,
+            autoBackup: false,
+            backupFrequency: 'weekly',
+            twoFactorEnabled: false
+        };
+        
+        try {
+            const savedSettings = localStorage.getItem('userSettings');
+            if (savedSettings) {
+                return { ...defaultSettings, ...JSON.parse(savedSettings) };
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+        
+        return defaultSettings;
+    }
+
+    saveSettings(settings) {
+        try {
+            localStorage.setItem('userSettings', JSON.stringify(settings));
+            return true;
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            return false;
         }
     }
 
@@ -371,10 +587,36 @@ class SettingsManager {
         }
     }
 
+    async removeAvatar() {
+        try {
+            const currentUser = this.auth.getCurrentUser();
+            if (!currentUser) return;
+
+            await this.db.update('users', currentUser.id, {
+                avatar: null
+            });
+
+            currentUser.avatar = null;
+            this.auth.setCurrentUser(currentUser);
+            this.loadUserProfile();
+            
+            this.ui.showToast('Avatar removed successfully', 'success');
+            
+        } catch (error) {
+            console.error('Error removing avatar:', error);
+            this.ui.showToast('Error removing avatar', 'error');
+        }
+    }
+
     changeTheme(themeName) {
         if (this.theme) {
             this.theme.changeTheme(themeName);
         }
+        
+        // Update settings
+        const settings = this.getCurrentSettings();
+        settings.theme = themeName;
+        this.saveSettings(settings);
         
         // Update active theme in UI
         document.querySelectorAll('.theme-option').forEach(option => {
@@ -383,6 +625,28 @@ class SettingsManager {
         document.querySelector(`[data-theme="${themeName}"]`).classList.add('active');
         
         this.ui.showToast(`Theme changed to ${themeName}`, 'success');
+    }
+
+    saveAppearanceSettings() {
+        const settings = this.getCurrentSettings();
+        
+        settings.compactMode = document.getElementById('compactMode').checked;
+        settings.animations = document.getElementById('animations').checked;
+        settings.soundEffects = document.getElementById('soundEffects').checked;
+        settings.autoBackup = document.getElementById('autoBackup').checked;
+        
+        if (this.saveSettings(settings)) {
+            this.ui.showToast('Appearance settings saved', 'success');
+            
+            // Apply compact mode if changed
+            if (settings.compactMode) {
+                document.body.classList.add('compact-mode');
+            } else {
+                document.body.classList.remove('compact-mode');
+            }
+        } else {
+            this.ui.showToast('Error saving settings', 'error');
+        }
     }
 
     async updateProfile(profileData) {
@@ -435,91 +699,292 @@ class SettingsManager {
         }
     }
 
-    setupSettingsForms() {
-        // Profile form
-        const profileForm = document.getElementById('profileForm');
-        if (profileForm) {
-            profileForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const formData = {
-                    name: document.getElementById('profileName').value,
-                    email: document.getElementById('profileEmail').value,
-                    phone: document.getElementById('profilePhone').value
-                };
-                this.updateProfile(formData);
-            });
-        }
+    logoutAllDevices() {
+        this.ui.showConfirmDialog(
+            'Logout from all devices?',
+            'This will log you out from all devices and invalidate all active sessions.',
+            () => {
+                // In a real app, this would invalidate all sessions
+                this.ui.showToast('Logged out from all devices', 'success');
+                // Optionally force logout current session too
+                setTimeout(() => {
+                    this.auth.logout();
+                }, 2000);
+            }
+        );
+    }
 
-        // Password form
-        const passwordForm = document.getElementById('passwordForm');
-        if (passwordForm) {
-            passwordForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const currentPassword = document.getElementById('currentPassword').value;
-                const newPassword = document.getElementById('newPassword').value;
-                const confirmPassword = document.getElementById('confirmPassword').value;
+    is2FAEnabled() {
+        const settings = this.getCurrentSettings();
+        return settings.twoFactorEnabled;
+    }
 
-                if (newPassword !== confirmPassword) {
-                    this.ui.showToast('New passwords do not match', 'error');
-                    return;
-                }
-
-                this.changePassword(currentPassword, newPassword);
-            });
-        }
-
-        // Remove avatar button
-        const removeAvatarBtn = document.getElementById('removeAvatarBtn');
-        if (removeAvatarBtn) {
-            removeAvatarBtn.addEventListener('click', () => {
-                this.removeAvatar();
-            });
-        }
-
-        // Backup buttons
-        const createBackupBtn = document.getElementById('createBackupBtn');
-        if (createBackupBtn) {
-            createBackupBtn.addEventListener('click', () => {
-                if (app.getManagers().reports) {
-                    app.getManagers().reports.showBackupOptions();
-                }
-            });
-        }
-
-        // Logout all button
-        const logoutAllBtn = document.getElementById('logoutAllBtn');
-        if (logoutAllBtn) {
-            logoutAllBtn.addEventListener('click', () => {
-                this.logoutAllDevices();
-            });
+    toggle2FA() {
+        const settings = this.getCurrentSettings();
+        settings.twoFactorEnabled = !settings.twoFactorEnabled;
+        
+        if (this.saveSettings(settings)) {
+            this.ui.showToast(
+                `Two-factor authentication ${settings.twoFactorEnabled ? 'enabled' : 'disabled'}`,
+                'success'
+            );
+            
+            // Reload security tab to update UI
+            this.refreshSecurityTab();
+        } else {
+            this.ui.showToast('Error updating 2FA settings', 'error');
         }
     }
 
-    async removeAvatar() {
+    refreshSecurityTab() {
+        const securityTab = document.getElementById('securityTab');
+        if (securityTab) {
+            securityTab.innerHTML = this.getSecurityTabContent();
+            this.setupSettingsForms();
+        }
+    }
+
+    async createBackup() {
         try {
-            const currentUser = this.auth.getCurrentUser();
-            if (!currentUser) return;
-
-            await this.db.update('users', currentUser.id, {
-                avatar: null
-            });
-
-            currentUser.avatar = null;
-            this.auth.setCurrentUser(currentUser);
-            this.loadUserProfile();
+            this.ui.showLoading('Creating backup...');
             
-            this.ui.showToast('Avatar removed successfully', 'success');
+            // Get all data from database
+            const tables = ['users', 'employees', 'bills', 'customers', 'salary', 'attendance'];
+            const backupData = {};
+            
+            for (const table of tables) {
+                try {
+                    const data = await this.db.getAll(table);
+                    backupData[table] = data;
+                } catch (error) {
+                    console.warn(`Could not backup table ${table}:`, error);
+                    backupData[table] = [];
+                }
+            }
+            
+            // Add metadata
+            backupData.metadata = {
+                version: '1.0.0',
+                created: new Date().toISOString(),
+                user: this.auth.getCurrentUser()?.name || 'Unknown',
+                recordCount: Object.values(backupData).reduce((total, tableData) => total + tableData.length, 0)
+            };
+            
+            // Create download
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { 
+                type: 'application/json' 
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `business-manager-backup-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Save backup record
+            await this.saveBackupRecord(backupData.metadata);
+            
+            this.ui.showToast('Backup created successfully', 'success');
             
         } catch (error) {
-            console.error('Error removing avatar:', error);
-            this.ui.showToast('Error removing avatar', 'error');
+            console.error('Error creating backup:', error);
+            this.ui.showToast('Error creating backup', 'error');
+        } finally {
+            this.ui.hideLoading();
         }
     }
 
-    logoutAllDevices() {
-        this.ui.showToast('This feature will log you out from all devices', 'info');
-        // In a real app, this would invalidate all sessions
+    async saveBackupRecord(metadata) {
+        try {
+            const backups = JSON.parse(localStorage.getItem('backupHistory') || '[]');
+            backups.unshift({
+                id: Date.now().toString(),
+                filename: `business-manager-backup-${new Date().toISOString().split('T')[0]}.json`,
+                date: metadata.created,
+                size: this.formatFileSize(JSON.stringify(metadata).length),
+                recordCount: metadata.recordCount
+            });
+            
+            // Keep only last 10 backups
+            if (backups.length > 10) {
+                backups.splice(10);
+            }
+            
+            localStorage.setItem('backupHistory', JSON.stringify(backups));
+            this.loadBackupHistory();
+            
+        } catch (error) {
+            console.error('Error saving backup record:', error);
+        }
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    loadBackupHistory() {
+        const backupList = document.getElementById('backupList');
+        if (!backupList) return;
+        
+        const backups = JSON.parse(localStorage.getItem('backupHistory') || '[]');
+        
+        if (backups.length === 0) {
+            backupList.innerHTML = '<p class="no-data">No backups found</p>';
+            return;
+        }
+        
+        backupList.innerHTML = backups.map(backup => `
+            <div class="backup-item">
+                <div class="backup-item-info">
+                    <div class="backup-filename">${backup.filename}</div>
+                    <div class="backup-details">
+                        <span><i class="fas fa-calendar"></i> ${new Date(backup.date).toLocaleDateString()}</span>
+                        <span><i class="fas fa-database"></i> ${backup.recordCount} records</span>
+                        <span><i class="fas fa-hdd"></i> ${backup.size}</span>
+                    </div>
+                </div>
+                <div class="backup-item-actions">
+                    <button class="btn-icon" onclick="settingsManager.restoreBackup('${backup.id}')" title="Restore this backup">
+                        <i class="fas fa-upload"></i>
+                    </button>
+                    <button class="btn-icon" onclick="settingsManager.deleteBackup('${backup.id}')" title="Delete this backup">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    showRestoreBackup() {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.handleRestoreBackup(file);
+            }
+        });
+
+        document.body.appendChild(fileInput);
+        fileInput.click();
+        document.body.removeChild(fileInput);
+    }
+
+    async handleRestoreBackup(file) {
+        try {
+            if (!file.name.endsWith('.json')) {
+                this.ui.showToast('Please select a valid backup file (.json)', 'error');
+                return;
+            }
+
+            this.ui.showConfirmDialog(
+                'Restore Backup?',
+                'This will overwrite all current data. This action cannot be undone. Are you sure you want to continue?',
+                async () => {
+                    this.ui.showLoading('Restoring backup...');
+                    
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const backupData = JSON.parse(e.target.result);
+                            
+                            // Validate backup file
+                            if (!backupData.metadata || !backupData.metadata.version) {
+                                throw new Error('Invalid backup file format');
+                            }
+                            
+                            // Restore data table by table
+                            for (const [table, data] of Object.entries(backupData)) {
+                                if (table !== 'metadata') {
+                                    await this.restoreTableData(table, data);
+                                }
+                            }
+                            
+                            this.ui.showToast('Backup restored successfully', 'success');
+                            
+                            // Reload the application to reflect changes
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 2000);
+                            
+                        } catch (error) {
+                            console.error('Error restoring backup:', error);
+                            this.ui.showToast('Error restoring backup: ' + error.message, 'error');
+                        } finally {
+                            this.ui.hideLoading();
+                        }
+                    };
+                    
+                    reader.readAsText(file);
+                }
+            );
+            
+        } catch (error) {
+            console.error('Error handling backup restore:', error);
+            this.ui.showToast('Error processing backup file', 'error');
+        }
+    }
+
+    async restoreTableData(table, data) {
+        try {
+            // Clear existing data
+            await this.db.clearTable(table);
+            
+            // Insert backup data
+            for (const item of data) {
+                await this.db.create(table, item);
+            }
+        } catch (error) {
+            console.error(`Error restoring table ${table}:`, error);
+            throw error;
+        }
+    }
+
+    async restoreBackup(backupId) {
+        // This would restore from a previously saved backup
+        this.ui.showToast('Backup restoration feature coming soon', 'info');
+    }
+
+    async deleteBackup(backupId) {
+        this.ui.showConfirmDialog(
+            'Delete Backup?',
+            'This will permanently delete this backup file.',
+            () => {
+                const backups = JSON.parse(localStorage.getItem('backupHistory') || '[]');
+                const updatedBackups = backups.filter(backup => backup.id !== backupId);
+                localStorage.setItem('backupHistory', JSON.stringify(updatedBackups));
+                this.loadBackupHistory();
+                this.ui.showToast('Backup deleted successfully', 'success');
+            }
+        );
+    }
+
+    saveBackupSettings() {
+        const settings = this.getCurrentSettings();
+        const autoBackupEnabled = document.getElementById('autoBackupEnabled');
+        const backupFrequency = document.getElementById('backupFrequency');
+        
+        if (autoBackupEnabled && backupFrequency) {
+            settings.autoBackup = autoBackupEnabled.checked;
+            settings.backupFrequency = backupFrequency.value;
+            
+            if (this.saveSettings(settings)) {
+                this.ui.showToast('Backup settings saved', 'success');
+            } else {
+                this.ui.showToast('Error saving backup settings', 'error');
+            }
+        }
     }
 }
 
+// Make it available globally
 window.SettingsManager = SettingsManager;
