@@ -1,3 +1,4 @@
+// UpdateManager class for handling application updates
 class UpdateManager {
     constructor(ui) {
         this.ui = ui;
@@ -263,11 +264,11 @@ class UpdateManager {
         }
 
         document.body.insertAdjacentHTML('beforeend', html);
-        
+
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.style.display = 'flex';
-            
+
             // Add close event
             const closeBtn = modal.querySelector('.modal-close');
             if (closeBtn) {
@@ -275,7 +276,7 @@ class UpdateManager {
                     this.hideUpdateModal();
                 });
             }
-            
+
             // Close on background click
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
@@ -306,6 +307,7 @@ class UpdateManager {
 
 window.UpdateManager = UpdateManager;
 
+// Main BusinessDashboard class
 class BusinessDashboard {
     constructor() {
         this.isInitialized = false;
@@ -472,59 +474,162 @@ class BusinessDashboard {
 
             this.updateSidebarVisibility(currentUser.role);
 
-            if (this.auth.canAccessSection) {
-                if (!this.auth.canAccessSection(sectionId)) {
+            // ✅ FIXED: Add the isSectionActive function here
+            const isSectionActive = (sectionElement) => {
+                return sectionElement &&
+                    sectionElement.style.display !== 'none' &&
+                    sectionElement.offsetParent !== null;
+            };
+
+            // FIXED: Check if canAccessSection method exists before calling it
+            if (this.auth && typeof this.auth.canAccessSection === 'function') {
+                if (!this.auth.canAccessSection(sectionId, currentUser.role)) {
+                    console.warn(`🚫 User ${currentUser.name} (${currentUser.role}) cannot access section: ${sectionId}`);
                     this.ui.showToast('You do not have permission to access this section', 'error');
                     return;
                 }
+            } else {
+                console.log('⚠️ canAccessSection method not available, skipping permission check');
             }
 
+            // ✅ FIXED: Section Mapping with proper active checks
             const sectionHandlers = {
                 'dashboard': () => this.loadDashboardData(),
                 'users': async () => {
                     await this.ensureManagerInitialized('user');
+
+                    const usersSection = document.getElementById('usersContent');
+                    const isUsersActive = isSectionActive(usersSection); // ✅ Use the new function
+
+                    if (!isUsersActive) {
+                        console.log('🚫 Users section not active, skipping users setup');
+                        return;
+                    }
+
                     await this.managers.user?.loadUsers?.();
                 },
                 'employees': async () => {
                     await this.ensureManagerInitialized('employee');
+
+                    const employeesSection = document.getElementById('employeesContent');
+                    const isEmployeesActive = isSectionActive(employeesSection); // ✅ Use the new function
+
+                    if (!isEmployeesActive) {
+                        console.log('🚫 Employees section not active, skipping employees setup');
+                        return;
+                    }
+
                     await this.managers.employee?.loadEmployees?.();
                 },
                 'salary': async () => {
                     await this.ensureManagerInitialized('salary');
                     const manager = this.managers.salary;
-                    if (manager?.loadSalaryData) return manager.loadSalaryData();
-                    if (manager?.setupSalaryForm) manager.setupSalaryForm();
+
+                    const salarySection = document.getElementById('salaryContent');
+                    const isSalaryActive = isSectionActive(salarySection); // ✅ Use the new function
+
+                    if (!isSalaryActive) {
+                        console.log('🚫 Salary section not active, skipping salary setup');
+                        return;
+                    }
+
+                    if (manager?.loadSalaryData) {
+                        return manager.loadSalaryData();
+                    }
                 },
                 'attendance': async () => {
                     await this.ensureManagerInitialized('attendance');
                     const manager = this.managers.attendance;
+
+                    const attendanceSection = document.getElementById('attendanceContent');
+                    const isAttendanceActive = isSectionActive(attendanceSection); // ✅ Use the new function
+
+                    if (!isAttendanceActive) {
+                        console.log('🚫 Attendance section not active, skipping attendance setup');
+                        return;
+                    }
+
                     if (manager?.loadAttendanceSection) return manager.loadAttendanceSection();
                     if (manager?.loadAttendanceRecords) return manager.loadAttendanceRecords();
                 },
                 'salary-payments': async () => {
                     await this.ensureManagerInitialized('salary');
                     const manager = this.managers.salary;
+
+                    const salaryPaymentsSection = document.getElementById('salaryPaymentsContent');
+                    const isSalaryPaymentsActive = isSectionActive(salaryPaymentsSection); // ✅ Use the new function
+
+                    if (!isSalaryPaymentsActive) {
+                        console.log('🚫 Salary payments section not active, skipping salary payments setup');
+                        return;
+                    }
+
                     if (manager?.loadSalaryPaymentsData) return manager.loadSalaryPaymentsData();
                     if (manager?.initializeSalaryPayments) return manager.initializeSalaryPayments();
                 },
                 'billing': async () => {
                     await this.ensureManagerInitialized('billing');
+
+                    const billingSection = document.getElementById('billingContent');
+                    const isBillingActive = isSectionActive(billingSection); // ✅ Use the new function
+
+                    if (!isBillingActive) {
+                        console.log('🚫 Billing section not active, skipping billing setup');
+                        return;
+                    }
+
                     await this.managers.billing?.loadBills?.();
                 },
                 'customers': async () => {
                     await this.ensureManagerInitialized('customer');
+
+                    const customersSection = document.getElementById('customersContent');
+                    const isCustomersActive = isSectionActive(customersSection); // ✅ Use the new function
+
+                    if (!isCustomersActive) {
+                        console.log('🚫 Customers section not active, skipping customers setup');
+                        return;
+                    }
+
                     await this.managers.customer?.loadCustomers?.();
                 },
                 'pending': async () => {
                     await this.ensureManagerInitialized('billing');
+
+                    const pendingSection = document.getElementById('pendingContent');
+                    const isPendingActive = isSectionActive(pendingSection); // ✅ Use the new function
+
+                    if (!isPendingActive) {
+                        console.log('🚫 Pending section not active, skipping pending setup');
+                        return;
+                    }
+
                     await this.managers.billing?.loadPendingBills?.();
                 },
                 'payments': async () => {
                     await this.ensureManagerInitialized('billing');
+
+                    const paymentsSection = document.getElementById('paymentsContent');
+                    const isPaymentsActive = isSectionActive(paymentsSection); // ✅ Use the new function
+
+                    if (!isPaymentsActive) {
+                        console.log('🚫 Payments section not active, skipping payments setup');
+                        return;
+                    }
+
                     await this.managers.billing?.loadPayments?.();
                 },
                 'reports': async () => {
                     await this.ensureManagerInitialized('reports');
+
+                    const reportsSection = document.getElementById('reportsContent');
+                    const isReportsActive = isSectionActive(reportsSection); // ✅ Use the new function
+
+                    if (!isReportsActive) {
+                        console.log('🚫 Reports section not active, skipping reports setup');
+                        return;
+                    }
+
                     await this.managers.reports?.loadReports?.();
                 },
                 'settings': () => this.loadSettings()
@@ -552,7 +657,7 @@ class BusinessDashboard {
             console.error(`❌ Manager ${managerName} not found`);
             return false;
         }
-        
+
         if (!manager.isInitialized) {
             console.log(`🔄 Initializing ${managerName}...`);
             try {
@@ -563,7 +668,7 @@ class BusinessDashboard {
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -580,9 +685,8 @@ class BusinessDashboard {
             if (navLink && navLink.dataset.section) {
                 const sectionId = navLink.dataset.section;
                 console.log('🖱️ Nav link clicked:', sectionId);
-                setTimeout(() => {
-                    this.loadSectionData(sectionId);
-                }, 100);
+                e.preventDefault();
+                this.showSection(sectionId);
             }
         });
 
@@ -600,6 +704,67 @@ class BusinessDashboard {
         });
 
         console.log('✅ Section listeners setup complete');
+    }
+
+    async showSection(sectionId) {
+        console.log(`📂 Switching to section: ${sectionId}`);
+
+        // Hide all sections first
+        document.querySelectorAll('.content-section, .section-content').forEach(section => {
+            section.style.display = 'none';
+            section.classList.remove('active');
+        });
+
+        // Remove active class from all nav links
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.classList.remove('active');
+        });
+
+        // Fixed Section Mapping
+        const sectionMap = {
+            'dashboard': 'dashboardContent',
+            'users': 'usersContent',
+            'employees': 'employeesContent',
+            'salary': 'salaryContent',
+            'attendance': 'attendanceContent',
+            'salary-payments': 'salaryPaymentsContent',
+            'billing': 'billingContent',
+            'customers': 'customersContent',
+            'pending': 'pendingContent',
+            'payments': 'paymentsContent',
+            'reports': 'reportsContent',
+            'settings': 'settingsContent'
+        };
+
+        const contentId = sectionMap[sectionId] || `${sectionId}Content`;
+        const targetSection = document.getElementById(contentId);
+        const targetNavLink = document.querySelector(`[data-section="${sectionId}"]`);
+
+        if (!targetSection || !targetNavLink) {
+            console.error(`❌ Could not find section: ${contentId} or nav link for ${sectionId}`);
+            return false;
+        }
+
+        // Show target section
+        targetSection.style.display = 'block';
+        targetSection.classList.add('active');
+        targetNavLink.classList.add('active');
+
+        console.log(`✅ Section shown: ${sectionId} (ID: ${contentId})`);
+
+        // ✅ FIXED: Call specific activation methods for salary sections
+        if (sectionId === 'salary' && this.managers.salary) {
+            console.log('💰 Activating salary section...');
+            this.managers.salary.activateSalarySection();
+        } else if (sectionId === 'salary-payments' && this.managers.salary) {
+            console.log('💰 Activating salary payments section...');
+            this.managers.salary.initializeSalaryPayments();
+        } else {
+            // Load section data for other sections
+            await this.loadSectionData(sectionId);
+        }
+
+        return true;
     }
 
     updateSidebarVisibility(userRole) {

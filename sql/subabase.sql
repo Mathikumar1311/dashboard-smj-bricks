@@ -806,3 +806,29 @@ BEGIN
     RAISE NOTICE '🚀 System ready for production use!';
     RAISE NOTICE '==========================================';
 END $$;
+
+-- Add missing columns to advance_records
+ALTER TABLE advance_records 
+ADD COLUMN IF NOT EXISTS paid_date TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deducted_date TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS week_number INTEGER,
+ADD COLUMN IF NOT EXISTS month_number INTEGER,
+ADD COLUMN IF NOT EXISTS year INTEGER;
+
+-- Add missing columns to salary_records
+ALTER TABLE salary_records 
+ADD COLUMN IF NOT EXISTS week_number INTEGER,
+ADD COLUMN IF NOT EXISTS month_number INTEGER,
+ADD COLUMN IF NOT EXISTS year INTEGER;
+
+-- FIX THE FOREIGN KEY CONSTRAINT
+ALTER TABLE employees 
+DROP CONSTRAINT IF EXISTS fk_employees_family_group;
+
+ALTER TABLE employees
+ADD CONSTRAINT fk_employees_family_group 
+FOREIGN KEY (family_group_id) 
+REFERENCES family_groups(id) 
+ON DELETE SET NULL;
+
+ALTER TABLE attendance ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();

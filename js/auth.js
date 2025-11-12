@@ -341,8 +341,8 @@ class AuthManager {
         console.log(`🔐 Setting up access for role: ${role}`);
 
         const permissions = {
-            admin: ['dashboard', 'users', 'employees', 'salary', 'attendance', 'billing', 'customers', 'reports', 'settings'],
-            manager: ['dashboard', 'employees', 'salary', 'attendance', 'billing', 'customers', 'reports'],
+            admin: ['dashboard', 'users', 'employees', 'salary', 'salary-payments', 'attendance', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'],
+            manager: ['dashboard', 'employees', 'salary', 'salary-payments', 'attendance', 'billing', 'customers', 'reports'],
             user: ['dashboard', 'reports', 'settings']
         };
 
@@ -372,34 +372,102 @@ class AuthManager {
         return names[role] || role;
     }
 
-    // Permission checking
-    hasPermission(requiredRole) {
-        if (!this.currentUser) return false;
+    // Enhanced Permission checking system
+    hasPermission(requiredPermission) {
+        if (!this.currentUser) {
+            console.log('🔐 No current user for permission check');
+            return false;
+        }
         
-        const hierarchy = { admin: 3, manager: 2, user: 1 };
-        const userLevel = hierarchy[this.currentUser.role] || 0;
-        const requiredLevel = hierarchy[requiredRole] || 0;
+        console.log(`🔐 Checking permission: ${requiredPermission} for role: ${this.currentUser.role}`);
         
-        return userLevel >= requiredLevel;
+        // Define comprehensive permissions for each role
+        const rolePermissions = {
+            admin: [
+                // Role hierarchy
+                'admin', 'manager', 'supervisor', 'user',
+                
+                // Sections
+                'dashboard', 'users', 'employees', 'salary', 'salary-payments',
+                'attendance', 'billing', 'customers', 'pending', 'payments', 
+                'reports', 'settings',
+                
+                // Actions
+                'create', 'read', 'update', 'delete', 'export', 'import'
+            ],
+            manager: [
+                // Role hierarchy
+                'manager', 'supervisor', 'user',
+                
+                // Sections
+                'dashboard', 'employees', 'salary', 'salary-payments',
+                'attendance', 'billing', 'customers', 'reports',
+                
+                // Actions
+                'create', 'read', 'update', 'export'
+            ],
+            user: [
+                // Role hierarchy
+                'user',
+                
+                // Sections
+                'dashboard', 'reports', 'settings',
+                
+                // Actions
+                'read'
+            ]
+        };
+
+        const userPermissions = rolePermissions[this.currentUser.role] || [];
+        const hasAccess = userPermissions.includes(requiredPermission);
+        
+        console.log(`🔐 ${this.currentUser.role} access to ${requiredPermission}: ${hasAccess}`);
+        return hasAccess;
     }
 
+    // Section access control
     canAccessSection(sectionName) {
-        if (!this.currentUser) return false;
+        if (!this.currentUser) {
+            console.log('🔐 No current user for section access check');
+            return false;
+        }
 
-        const permissions = {
+        console.log(`🔐 Checking section access: ${sectionName} for role: ${this.currentUser.role}`);
+
+        const sectionPermissions = {
             dashboard: ['admin', 'manager', 'user'],
             users: ['admin'],
             employees: ['admin', 'manager'],
             salary: ['admin', 'manager'],
+            'salary-payments': ['admin', 'manager'], // ✅ FIXED: Added salary-payments
             attendance: ['admin', 'manager'],
             billing: ['admin', 'manager'],
             customers: ['admin', 'manager'],
+            pending: ['admin', 'manager'],
+            payments: ['admin', 'manager'],
             reports: ['admin', 'manager', 'user'],
             settings: ['admin', 'manager', 'user']
         };
 
-        const allowedRoles = permissions[sectionName] || [];
-        return allowedRoles.includes(this.currentUser.role);
+        const allowedRoles = sectionPermissions[sectionName] || [];
+        const canAccess = allowedRoles.includes(this.currentUser.role);
+        
+        console.log(`🔐 ${this.currentUser.role} access to section ${sectionName}: ${canAccess}`);
+        return canAccess;
+    }
+
+    // Check if user can perform specific actions
+    canPerformAction(action, resource = null) {
+        if (!this.currentUser) return false;
+
+        const actionPermissions = {
+            admin: ['create', 'read', 'update', 'delete', 'export', 'import', 'manage_users'],
+            manager: ['create', 'read', 'update', 'export', 'manage_employees'],
+            user: ['read']
+        };
+
+        const allowedActions = actionPermissions[this.currentUser.role] || [];
+        return allowedActions.includes(action);
     }
 
     // Utility methods
@@ -431,16 +499,26 @@ class AuthManager {
     showLoading(message = 'Loading...') {
         console.log(`⏳ ${message}`);
         // You can implement a proper loading indicator here
+        if (this.ui && typeof this.ui.showLoading === 'function') {
+            this.ui.showLoading(message);
+        }
     }
 
     hideLoading() {
         // Hide loading indicator
+        if (this.ui && typeof this.ui.hideLoading === 'function') {
+            this.ui.hideLoading();
+        }
     }
 
     showToast(message, type = 'info') {
         console.log(`[${type.toUpperCase()}] ${message}`);
-        // Simple alert fallback - replace with proper toast
-        alert(`${type.toUpperCase()}: ${message}`);
+        if (this.ui && typeof this.ui.showToast === 'function') {
+            this.ui.showToast(message, type);
+        } else {
+            // Fallback to alert
+            alert(`${type.toUpperCase()}: ${message}`);
+        }
     }
 
     getCurrentUser() {
@@ -451,6 +529,90 @@ class AuthManager {
         return this.isAuthenticated && this.currentUser !== null;
     }
 
+    // Get user role with hierarchy
+    getUserRole() {
+        return this.currentUser?.role || null;
+    }
+
+    // Check if user has at least the specified role level
+    hasRole(minimumRole) {
+        if (!this.currentUser) return false;
+        
+        const roleHierarchy = {
+            'admin': 4,
+            'manager': 3,
+            'supervisor': 2,
+            'user': 1
+        };
+        
+        const userLevel = roleHierarchy[this.currentUser.role] || 0;
+        const requiredLevel = roleHierarchy[minimumRole] || 0;
+        
+        return userLevel >= requiredLevel;
+    }
+
+    // Debug method to check all permissions
+    debugPermissions() {
+        console.group('🔐 DEBUG AuthManager Permissions');
+        console.log('Current User:', this.currentUser);
+        
+        if (this.currentUser) {
+            // Check section permissions
+            const sections = [
+                'dashboard', 'users', 'employees', 'salary', 'salary-payments',
+                'attendance', 'billing', 'customers', 'pending', 'payments', 'reports', 'settings'
+            ];
+            
+            console.group('📊 Section Access:');
+            sections.forEach(section => {
+                console.log(`- ${section}: ${this.canAccessSection(section)}`);
+            });
+            console.groupEnd();
+            
+            // Check action permissions
+            const actions = ['create', 'read', 'update', 'delete', 'export'];
+            console.group('⚡ Action Permissions:');
+            actions.forEach(action => {
+                console.log(`- ${action}: ${this.canPerformAction(action)}`);
+            });
+            console.groupEnd();
+            
+            // Check role-based permissions
+            console.group('👥 Role Permissions:');
+            console.log(`- Has admin permission: ${this.hasPermission('admin')}`);
+            console.log(`- Has manager permission: ${this.hasPermission('manager')}`);
+            console.log(`- Has salary-payments permission: ${this.hasPermission('salary-payments')}`);
+            console.groupEnd();
+        } else {
+            console.log('❌ No user logged in');
+        }
+        
+        console.groupEnd();
+    }
+
+    // Session management
+    getSessionInfo() {
+        return {
+            isAuthenticated: this.isAuthenticated,
+            user: this.currentUser,
+            loginTime: this.currentUser?.updated_at,
+            permissions: this.getUserPermissions()
+        };
+    }
+
+    getUserPermissions() {
+        if (!this.currentUser) return [];
+        
+        const rolePermissions = {
+            admin: ['all'],
+            manager: ['employees', 'salary', 'attendance', 'billing', 'customers', 'reports'],
+            user: ['dashboard', 'reports']
+        };
+        
+        return rolePermissions[this.currentUser.role] || [];
+    }
+
+    // Cleanup method
     cleanup() {
         // Cleanup event listeners
         const loginForm = document.getElementById('loginForm');
@@ -464,6 +626,53 @@ class AuthManager {
             logoutBtn.removeEventListener('click', this.handleLogout);
             logoutBtn._authListenerAttached = false;
         }
+    }
+
+    // Password strength checker (utility method)
+    checkPasswordStrength(password) {
+        if (!password) return 'weak';
+        
+        let strength = 0;
+        
+        // Length check
+        if (password.length >= 8) strength++;
+        if (password.length >= 12) strength++;
+        
+        // Complexity checks
+        if (/[a-z]/.test(password)) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[0-9]/.test(password)) strength++;
+        if (/[^a-zA-Z0-9]/.test(password)) strength++;
+        
+        if (strength <= 2) return 'weak';
+        if (strength <= 4) return 'medium';
+        return 'strong';
+    }
+
+    // Validate user data
+    validateUserData(userData) {
+        const errors = [];
+        
+        if (!userData.username || userData.username.length < 3) {
+            errors.push('Username must be at least 3 characters long');
+        }
+        
+        if (!userData.name || userData.name.length < 2) {
+            errors.push('Name must be at least 2 characters long');
+        }
+        
+        if (!userData.role || !['admin', 'manager', 'user'].includes(userData.role)) {
+            errors.push('Invalid role specified');
+        }
+        
+        if (userData.email && !/\S+@\S+\.\S+/.test(userData.email)) {
+            errors.push('Invalid email format');
+        }
+        
+        return {
+            isValid: errors.length === 0,
+            errors: errors
+        };
     }
 }
 

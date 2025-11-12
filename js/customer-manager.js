@@ -375,11 +375,11 @@ class CustomerManager {
 
             // Get customer's bills and advance payments
             const customerBills = this.bills.filter(bill =>
-                bill.customer_phone === customer.phone
+                this.normalizePhone(bill.customer_phone) === this.normalizePhone(customer.phone)
             );
             
             const customerAdvances = this.advancePayments.filter(adv =>
-                adv.customer_phone === customer.phone
+                this.normalizePhone(adv.customer_phone) === this.normalizePhone(customer.phone)
             );
 
             const balance = this.calculateCustomerBalance(customer);
@@ -809,7 +809,9 @@ class CustomerManager {
 
         tbody.innerHTML = customers.map(customer => {
             const balance = this.calculateCustomerBalance(customer);
-            const customerBills = this.bills.filter(bill => bill.customer_phone === customer.phone);
+            const customerBills = this.bills.filter(bill => 
+                this.normalizePhone(bill.customer_phone) === this.normalizePhone(customer.phone)
+            );
             const pendingBills = customerBills.filter(bill => bill.status === 'pending');
             
             return `
@@ -849,18 +851,67 @@ class CustomerManager {
 
     // ==================== UTILITY METHODS ====================
 
+    // 🔧 FIXED: Added missing method for bills data synchronization
+    updateBillsData(bills) {
+        this.bills = bills || [];
+        // Refresh customer display if needed
+        if (this.currentSearchTerm) {
+            this.renderCustomersTable(this.filteredCustomers);
+        } else {
+            this.renderCustomersTable(this.customers);
+        }
+        console.log('✅ Customer bills data updated:', this.bills.length);
+    }
+
+    // 🔧 FIXED: Added comprehensive sync method
+    async syncWithBillingData() {
+        try {
+            // Get latest bills from billing manager
+            const billingManager = window.app?.getManagers()?.billing;
+            if (billingManager) {
+                this.bills = billingManager.bills || [];
+            } else {
+                // Fallback: load bills directly
+                this.bills = await this.db.getBills() || [];
+            }
+            
+            // Refresh customer display
+            if (this.currentSearchTerm) {
+                this.renderCustomersTable(this.filteredCustomers);
+            } else {
+                this.renderCustomersTable(this.customers);
+            }
+            
+            console.log('✅ Customer data synced with billing data');
+        } catch (error) {
+            console.error('Error syncing customer data:', error);
+        }
+    }
+
+    // 🔧 FIXED: Improved phone number normalization for matching
+    normalizePhone(phone) {
+        if (!phone) return '';
+        return phone.replace(/\D/g, '');
+    }
+
+    // 🔧 FIXED: Improved customer balance calculation with phone normalization
     calculateCustomerBalance(customer) {
         if (!this.bills) return 0;
         
-        const customerBills = this.bills.filter(bill => 
-            bill.customer_phone === customer.phone && bill.status === 'pending'
-        );
-        const totalPending = customerBills.reduce((sum, bill) => sum + bill.total_amount, 0);
+        const customerPhone = this.normalizePhone(customer.phone);
+        const customerBills = this.bills.filter(bill => {
+            const billPhone = this.normalizePhone(bill.customer_phone);
+            return billPhone === customerPhone && bill.status === 'pending';
+        });
         
-        const customerAdvances = this.advancePayments.filter(adv => 
-            adv.customer_phone === customer.phone
-        );
-        const totalAdvance = customerAdvances.reduce((sum, adv) => sum + adv.amount, 0);
+        const totalPending = customerBills.reduce((sum, bill) => sum + (bill.total_amount || 0), 0);
+        
+        const customerAdvances = this.advancePayments.filter(adv => {
+            const advPhone = this.normalizePhone(adv.customer_phone);
+            return advPhone === customerPhone;
+        });
+        
+        const totalAdvance = customerAdvances.reduce((sum, adv) => sum + (adv.amount || 0), 0);
         
         return totalAdvance - totalPending;
     }
@@ -873,11 +924,10 @@ class CustomerManager {
     }
 
     findCustomerByPhone(phone) {
-        return this.customers.find(customer => customer.phone === phone);
-    }
-
-    updateBillsData(bills) {
-        this.bills = bills || [];
+        const normalizedPhone = this.normalizePhone(phone);
+        return this.customers.find(customer => 
+            this.normalizePhone(customer.phone) === normalizedPhone
+        );
     }
 
     // ==================== MODAL MANAGEMENT ====================
@@ -907,7 +957,9 @@ class CustomerManager {
         }
 
         // Check if customer has bills
-        const customerBills = this.bills.filter(bill => bill.customer_phone === customer.phone);
+        const customerBills = this.bills.filter(bill => 
+            this.normalizePhone(bill.customer_phone) === this.normalizePhone(customer.phone)
+        );
         if (customerBills.length > 0) {
             this.ui.showToast('Cannot delete customer with existing bills', 'error');
             return;
@@ -1084,7 +1136,9 @@ class CustomerManager {
 
             const exportData = this.customers.map(customer => {
                 const balance = this.calculateCustomerBalance(customer);
-                const customerBills = this.bills.filter(bill => bill.customer_phone === customer.phone);
+                const customerBills = this.bills.filter(bill => 
+                    this.normalizePhone(bill.customer_phone) === this.normalizePhone(customer.phone)
+                );
                 
                 return {
                     'Name': customer.name,

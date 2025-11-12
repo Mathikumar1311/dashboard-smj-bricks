@@ -302,129 +302,81 @@
                     </div>
                 </div>
 
-                <div id="salaryContent" class="content-section">
-                    <div class="content-header">
-                        <h2><i class="fas fa-money-bill-wave"></i> Salary Dashboard</h2>
-                        <div class="header-actions">
-                            <button id="quickAttendanceBtn" class="btn-primary">
-                                <i class="fas fa-user-check"></i> Quick Attendance
-                            </button>
-                            <button id="bulkSalaryBtn" class="btn-success">
-                                <i class="fas fa-money-bill-wave"></i> Bulk Salary
-                            </button>
-                            <button id="exportSalaryBtn" class="btn-secondary">
-                                <i class="fas fa-download"></i> Export
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Quick Actions Panel -->
+                <div id="salaryContent" class="section-content">
+                    <!-- Quick Actions -->
                     <div id="quickActions"></div>
-
-                    <!-- Employee Grid View -->
-                    <div class="section-title">
-                        <h3><i class="fas fa-users"></i> Daily Employees</h3>
-                        <span class="badge" id="dailyEmployeeCountBadge">0 employees</span>
-                    </div>
-                    <div id="employeeGrid" class="employee-grid"></div>
 
                     <!-- Summary Cards -->
                     <div class="summary-cards">
                         <div class="summary-card">
-                            <div class="summary-icon primary">
-                                <i class="fas fa-indian-rupee-sign"></i>
+                            <div class="card-icon present">
+                                <i class="fas fa-user-check"></i>
                             </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Total Paid</div>
-                                <div class="summary-value" id="totalPaidAmount">₹0</div>
-                            </div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="summary-icon warning">
-                                <i class="fas fa-hand-holding-usd"></i>
-                            </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Pending Advances</div>
-                                <div class="summary-value" id="pendingAdvances">₹0</div>
+                            <div class="card-info">
+                                <h3 id="presentTodayCount">0</h3>
+                                <p>Present Today</p>
                             </div>
                         </div>
                         <div class="summary-card">
-                            <div class="summary-icon info">
+                            <div class="card-icon absent">
+                                <i class="fas fa-user-times"></i>
+                            </div>
+                            <div class="card-info">
+                                <h3 id="absentTodayCount">0</h3>
+                                <p>Absent Today</p>
+                            </div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="card-icon total">
                                 <i class="fas fa-users"></i>
                             </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Daily Employees</div>
-                                <div class="summary-value" id="dailyEmployeesCount">0</div>
+                            <div class="card-info">
+                                <h3 id="totalEmployeesCount">0</h3>
+                                <p>Total Employees</p>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Date Filter -->
-                    <div class="filter-bar">
-                        <div class="filter-group">
-                            <button class="filter-btn active" data-filter="all">All</button>
-                            <button class="filter-btn" data-filter="today">Today</button>
-                            <button class="filter-btn" data-filter="week">This Week</button>
-                            <button class="filter-btn" data-filter="month">This Month</button>
-                        </div>
+                    <!-- Employee Grid -->
+                    <div class="section-panel">
+                        <h3><i class="fas fa-users"></i> Daily Employees</h3>
+                        <div id="employeeGrid" class="employee-grid"></div>
                     </div>
 
-                    <!-- Salary Entry Form -->
-                    <div class="form-card">
+                    <!-- Salary Form -->
+                    <div class="section-panel">
                         <h3><i class="fas fa-plus-circle"></i> Add Salary/Advance</h3>
-                        <form id="salaryForm" class="compact-form">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="salaryEmployee">Employee *</label>
-                                    <select id="salaryEmployee" required>
-                                        <option value="">Select Employee</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="salaryDate">Date *</label>
-                                    <input type="date" id="salaryDate" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="salaryAmount">Salary Amount</label>
-                                    <input type="number" id="salaryAmount" placeholder="0.00" step="0.01">
-                                </div>
-                                <div class="form-group">
-                                    <label for="advanceAmount">Advance Amount</label>
-                                    <input type="number" id="advanceAmount" placeholder="0.00" step="0.01">
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="btn-primary">
-                                    <i class="fas fa-save"></i> Save Record
-                                </button>
-                            </div>
+                        <form id="salaryForm" class="salary-form">
+                            <!-- Form content -->
                         </form>
                     </div>
 
-                    <!-- Salary Records Table -->
-                    <div class="table-container">
-                        <table id="salaryTable" class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Time</th>
-                                    <th>Employee ID</th>
-                                    <th>Employee Name</th>
-                                    <th>Type</th>
-                                    <th>Amount</th>
-                                    <th>Week</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="salaryTableBody">
-                                <tr>
-                                    <td colspan="8" class="no-data">
-                                        <i class="fas fa-money-bill-wave"></i>
-                                        <br>No salary records found
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <!-- Salary Records -->
+                    <div class="section-panel">
+                        <h3><i class="fas fa-history"></i> Recent Records</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Type</th>
+                                        <th>Amount</th>
+                                        <th>Week</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salaryTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Pending Advances -->
+                    <div class="section-panel">
+                        <h3><i class="fas fa-clock"></i> Pending Advances</h3>
+                        <div id="pendingAdvances" class="advances-grid"></div>
                     </div>
                 </div>
 
@@ -535,83 +487,86 @@
                     </div>
                 </div>
 
-                <!-- Salary Payments Section -->
-                <div id="salaryPaymentsContent" class="content-section">
-                    <div class="content-header">
-                        <h2><i class="fas fa-money-check"></i> Salary Payments</h2>
-                        <div class="header-actions">
-                            <button id="processSalaryBtn" class="btn-primary">
-                                <i class="fas fa-plus"></i> Process Salary Payment
-                            </button>
-                            <button id="exportSalaryPaymentsBtn" class="btn-secondary">
-                                <i class="fas fa-download"></i> Export
-                            </button>
-                        </div>
+                <!-- Add this to your index.html file in the sections area -->
+                <section id="salaryPaymentsContent" class="section-content">
+                    <div class="section-header">
+                        <h2><i class="fas fa-money-check-alt"></i> Salary Payments</h2>
+                        <p>Process employee salary payments and generate payslips</p>
                     </div>
 
-                    <!-- Salary Payments Summary -->
-                    <div class="summary-cards">
-                        <div class="summary-card">
-                            <div class="summary-icon success">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Processed Payments</div>
-                                <div class="summary-value" id="processedPaymentsCount">0</div>
-                            </div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="summary-icon primary">
-                                <i class="fas fa-indian-rupee-sign"></i>
-                            </div>
-                            <div class="summary-content">
-                                <div class="summary-label">Total Paid</div>
-                                <div class="summary-value" id="totalSalaryPaid">₹0</div>
-                            </div>
-                        </div>
-                        <div class="summary-card">
-                            <div class="summary-card">
-                                <div class="summary-icon info">
-                                    <i class="fas fa-file-invoice"></i>
-                                </div>
-                                <div class="summary-content">
-                                    <div class="summary-label">Payslips Generated</div>
-                                    <div class="summary-value" id="payslipsGenerated">0</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="salary-payments-container">
+                        <div class="salary-calculation-card">
+                            <h3>Salary Calculation & Payment</h3>
 
-                    <!-- Salary Payments Table -->
-                    <div class="table-container">
-                        <table id="salaryPaymentsTable" class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Payment ID</th>
-                                    <th>Payment Date</th>
-                                    <th>Employee</th>
-                                    <th>Pay Period</th>
-                                    <th>Basic Salary</th>
-                                    <th>Overtime</th>
-                                    <th>Deductions</th>
-                                    <th>Net Salary</th>
-                                    <th>Payment Method</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="salaryPaymentsTableBody">
-                                <tr>
-                                    <td colspan="11" class="no-data">
-                                        <i class="fas fa-money-check"></i>
-                                        <br>No salary payments recorded
-                                        <br><small>Process salary payments to see records here</small>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="salaryEmployeeSelect">Select Employee *</label>
+                                    <select id="salaryEmployeeSelect" class="form-control">
+                                        <option value="">Select Employee</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="salaryMonthSelect">Select Month *</label>
+                                    <select id="salaryMonthSelect" class="form-control">
+                                        <option value="">Select Month</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="salary-breakdown">
+                                <h4>Salary Breakdown</h4>
+                                <div class="breakdown-item">
+                                    <span>Basic Salary:</span>
+                                    <span id="basicSalaryAmount">₹0.00</span>
+                                </div>
+                                <div class="breakdown-item positive">
+                                    <span>Additions (Bonus, Overtime):</span>
+                                    <span id="additionsAmount">₹0.00</span>
+                                </div>
+                                <div class="breakdown-item negative">
+                                    <span>Deductions (Absences, PF, TDS):</span>
+                                    <span id="deductionsAmount">₹0.00</span>
+                                </div>
+                                <div class="breakdown-total">
+                                    <span>Net Salary Payable:</span>
+                                    <span id="netSalaryAmount">₹0.00</span>
+                                </div>
+                            </div>
+
+                            <div class="attendance-summary">
+                                <p id="attendanceSummary">Select employee and month to calculate salary</p>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button id="processSalaryBtn" class="btn-primary">
+                                    <i class="fas fa-check-circle"></i> Process Salary Payment
+                                </button>
+                                <button id="generatePayslipBtn" class="btn-secondary">
+                                    <i class="fas fa-file-pdf"></i> Generate Payslip
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="recent-payments-card">
+                            <div class="card-header">
+                                <h3>Recent Salary Payments</h3>
+                                <div class="header-actions">
+                                    <button id="viewHistoryBtn" class="btn-outline">
+                                        <i class="fas fa-history"></i> View Full History
+                                    </button>
+                                    <button id="exportPaymentsBtn" class="btn-outline">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="recentSalaryPayments" class="payments-list">
+                                <div class="empty-state">No recent payments found</div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- Billing Content -->
                 <div id="billingContent" class="content-section">

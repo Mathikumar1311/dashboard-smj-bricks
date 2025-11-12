@@ -3,6 +3,7 @@
  * ✅ Maintains login state after page reload
  * ✅ Secure session management
  * ✅ Auto-login from saved session
+ * ✅ Enhanced confirmation dialogs
  */
 
 class UIManager {
@@ -87,6 +88,112 @@ class UIManager {
             console.log('🧹 Session cleared');
             return true;
         }, 'Clear session', false);
+    }
+
+    // 🛡️ ENHANCED CONFIRMATION DIALOG
+    async showConfirmation(title, message, confirmText = 'Confirm', cancelText = 'Cancel', type = 'warning') {
+        return new Promise((resolve) => {
+            const modalId = 'confirmationModal';
+            
+            // Remove existing confirmation modal if any
+            const existingModal = document.getElementById(modalId);
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            const icon = {
+                'warning': 'fa-exclamation-triangle',
+                'danger': 'fa-exclamation-circle',
+                'info': 'fa-info-circle',
+                'success': 'fa-check-circle'
+            }[type] || 'fa-exclamation-triangle';
+
+            const color = {
+                'warning': 'warning',
+                'danger': 'danger',
+                'info': 'primary',
+                'success': 'success'
+            }[type] || 'warning';
+
+            const modalHtml = `
+                <div id="${modalId}" class="modal">
+                    <div class="modal-content" style="max-width: 500px;">
+                        <div class="modal-header">
+                            <h3><i class="fas ${icon} text-${color}"></i> ${title}</h3>
+                            <button type="button" class="modal-close">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="confirmation-content">
+                                <div class="confirmation-icon">
+                                    <i class="fas ${icon} text-${color}"></i>
+                                </div>
+                                <div class="confirmation-message">
+                                    ${message}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn-secondary" id="confirmationCancel">
+                                <i class="fas fa-times"></i> ${cancelText}
+                            </button>
+                            <button type="button" class="btn-${color}" id="confirmationConfirm">
+                                <i class="fas fa-check"></i> ${confirmText}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            const modal = document.getElementById(modalId);
+            const confirmBtn = document.getElementById('confirmationConfirm');
+            const cancelBtn = document.getElementById('confirmationCancel');
+            const closeBtn = modal.querySelector('.modal-close');
+
+            // Show modal
+            this.showModal(modalId);
+
+            const cleanup = () => {
+                this.hideModal(modalId);
+                setTimeout(() => {
+                    if (document.getElementById(modalId)) {
+                        document.getElementById(modalId).remove();
+                    }
+                }, 300);
+            };
+
+            const confirmAction = () => {
+                cleanup();
+                resolve(true);
+            };
+
+            const cancelAction = () => {
+                cleanup();
+                resolve(false);
+            };
+
+            // Event listeners
+            confirmBtn.addEventListener('click', confirmAction);
+            cancelBtn.addEventListener('click', cancelAction);
+            closeBtn.addEventListener('click', cancelAction);
+
+            // Close on backdrop click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    cancelAction();
+                }
+            });
+
+            // Escape key to cancel
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    cancelAction();
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+        });
     }
 
     // 🛡️ CORE SAFETY METHODS
@@ -429,7 +536,6 @@ class UIManager {
                 }, `Hide section: ${section.id}`);
             });
 
-
             // Show the selected section
             targetSection.classList.add('active');
             targetSection.style.display = 'block';
@@ -452,6 +558,14 @@ class UIManager {
             } catch (error) {
                 console.warn('History replaceState failed:', error);
             }
+
+            // 🆕 **CRITICAL FIX: Trigger data loading after section is shown**
+            setTimeout(() => {
+                if (window.app && window.app.loadSectionData) {
+                    console.log(`📊 Triggering data load for: ${sectionName}`);
+                    window.app.loadSectionData(sectionName);
+                }
+            }, 50);
 
             console.log(`✅ Section shown: ${sectionName} (ID: ${targetId})`);
             return true;
@@ -502,8 +616,7 @@ class UIManager {
         }, 'Role-based access setup', false);
     }
 
-
-    // Add this method to UserManager
+    // 🛡️ PASSWORD TOGGLE SYSTEM
     setupPasswordToggles() {
         console.log('🔧 Setting up password toggles...');
 
@@ -524,7 +637,7 @@ class UIManager {
         });
     }
 
-    // Add this method to handle the toggling
+    // 🛡️ PASSWORD VISIBILITY TOGGLE
     togglePasswordVisibility(toggleButton) {
         try {
             console.log('👁️ Toggling password visibility...');
@@ -617,7 +730,7 @@ class UIManager {
         }, 'Event listeners setup');
     }
 
-    // 🛡️ REST OF THE METHODS (identical to previous version - included for completeness)
+    // 🛡️ EVENT LISTENER MANAGEMENT
     addEventListener(selectorOrElement, event, handler) {
         try {
             const element = typeof selectorOrElement === 'string'
@@ -658,6 +771,7 @@ class UIManager {
         }
     }
 
+    // 🛡️ MODAL MANAGEMENT SYSTEM
     setupModals() {
         console.log('🪟 Setting up modal system...');
         this.safeExecute(() => {
@@ -741,6 +855,7 @@ class UIManager {
         }, 'Hide all modals');
     }
 
+    // 🛡️ TOAST NOTIFICATION SYSTEM
     showToast(message, type = 'info', duration = 5000) {
         return this.safeExecute(() => {
             let toastContainer = document.getElementById('toast-container');
@@ -818,6 +933,7 @@ class UIManager {
         }, `Show toast: ${message}`, false);
     }
 
+    // 🛡️ LOADING STATE MANAGEMENT
     showButtonLoading(button, text = 'Loading...') {
         return this.safeExecute(() => {
             if (!button) return () => { };
@@ -953,6 +1069,7 @@ class UIManager {
         }, 'Hide loading', false);
     }
 
+    // 🛡️ USER INTERFACE UPDATES
     updateUserInfo(user) {
         return this.safeExecute(() => {
             const currentUser = user || this.auth.getCurrentUser();
@@ -1001,6 +1118,7 @@ class UIManager {
         }, 'Handle resize');
     }
 
+    // 🛡️ DASHBOARD AND DATA MANAGEMENT
     updateDashboardStats(stats = {}) {
         return this.safeExecute(() => {
             const defaultStats = {
@@ -1038,6 +1156,7 @@ class UIManager {
         }, 'Update dashboard stats', false);
     }
 
+    // 🛡️ FORM VALIDATION AND ERROR HANDLING
     showFormError(input, message) {
         return this.safeExecute(() => {
             if (!input || !(input instanceof Element)) {
@@ -1093,6 +1212,7 @@ class UIManager {
         }, 'Validate phone', false);
     }
 
+    // 🛡️ TABLE RENDERING SYSTEM
     renderTable(tbodyId, data = [], rowRenderer) {
         return this.safeExecute(() => {
             const tbody = document.getElementById(tbodyId);
@@ -1145,71 +1265,8 @@ class UIManager {
 
         }, `Render table: ${tbodyId}`, false);
     }
-    showSection(sectionName) {
-        return this.safeExecute(() => {
-            console.log(`📂 Attempting to show section: ${sectionName}`);
 
-            // ✅ FIX: Convert section name to match HTML ID format
-            let targetId;
-            if (sectionName === 'salary-payments') {
-                targetId = 'salaryPaymentsContent';
-            } else {
-                // Convert other section names (like 'salary' to 'salaryContent')
-                targetId = sectionName.replace(/-([a-z])/g, (g) => g[1].toUpperCase()) + 'Content';
-            }
-
-            const targetSection = document.getElementById(targetId);
-
-            if (!targetSection) {
-                console.warn(`❌ Section content not found: ${targetId} (from section: ${sectionName})`);
-                this.showToast(`Section "${sectionName}" is not available`, 'error');
-                return false;
-            }
-
-            // ✅ FIX: Improved section hiding
-            document.querySelectorAll('.content-section').forEach(section => {
-                this.safeExecute(() => {
-                    section.classList.remove('active');
-                    section.style.display = 'none';
-                }, `Hide section: ${section.id}`);
-            });
-
-            // Show the selected section
-            targetSection.classList.add('active');
-            targetSection.style.display = 'block';
-
-            // Update navigation
-            document.querySelectorAll('.nav-link').forEach(link => {
-                link.classList.remove('active');
-            });
-
-            const targetLink = document.querySelector(`[data-section="${sectionName}"]`);
-            if (targetLink) {
-                targetLink.classList.add('active');
-            }
-
-            this.currentSection = sectionName;
-
-            // Update URL hash
-            try {
-                history.replaceState({ section: sectionName }, '', `#${sectionName}`);
-            } catch (error) {
-                console.warn('History replaceState failed:', error);
-            }
-
-            // 🆕 **CRITICAL FIX: Trigger data loading after section is shown**
-            setTimeout(() => {
-                if (window.app && window.app.loadSectionData) {
-                    console.log(`📊 Triggering data load for: ${sectionName}`);
-                    window.app.loadSectionData(sectionName);
-                }
-            }, 50);
-
-            console.log(`✅ Section shown: ${sectionName} (ID: ${targetId})`);
-            return true;
-
-        }, `Show section: ${sectionName}`, false);
-    }
+    // 🛡️ DATABASE STATUS INDICATOR
     updateDatabaseStatus(connected) {
         return this.safeExecute(() => {
             let statusElement = document.getElementById('dbStatus');
@@ -1236,6 +1293,7 @@ class UIManager {
         }, 'Update database status', false);
     }
 
+    // 🛡️ EXPORT PROGRESS MANAGEMENT
     showExportProgress(message = 'Exporting...') {
         return this.safeExecute(() => {
             this.showLoading(message);
@@ -1250,6 +1308,7 @@ class UIManager {
         }, 'Hide export progress', false);
     }
 
+    // 🛡️ STATE INITIALIZATION
     initializeFromSavedState() {
         return this.safeExecute(() => {
             if (this.sidebarCollapsed) {
@@ -1275,6 +1334,7 @@ class UIManager {
         }, 'Initialize from saved state', false);
     }
 
+    // 🛡️ UTILITY METHODS
     formatCurrency(amount) {
         return this.safeExecute(() => {
             if (typeof amount !== 'number') {
@@ -1314,6 +1374,7 @@ class UIManager {
         }, 'Show app ready', false);
     }
 
+    // 🛡️ FALLBACK MANAGERS
     createThemeManagerFallback() {
         return {
             switchTheme: (theme) => this.safeExecute(() => {
@@ -1338,6 +1399,7 @@ class UIManager {
         };
     }
 
+    // 🛡️ CLEANUP AND HEALTH CHECK
     cleanup() {
         console.log('🧹 Cleaning up UI manager...');
 

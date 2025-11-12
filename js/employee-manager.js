@@ -353,7 +353,7 @@ class EmployeeManager {
                 if (familyGroupId) {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.deleteFamilyGroup(familyGroupId);
+                    this.deleteFamilyGroupWithConfirmation(familyGroupId);
                 }
                 return;
             }
@@ -564,7 +564,7 @@ class EmployeeManager {
         }
     }
 
-    // NEW: Show modal to manage family members
+    // ENHANCED: Show modal to manage family members with improved UX
     async showManageFamilyMembersModal(familyGroupId) {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
             this.ui.showToast('Insufficient permissions to manage family groups', 'error');
@@ -585,7 +585,7 @@ class EmployeeManager {
 
         const modalHtml = `
             <div id="manageFamilyMembersModal" class="modal">
-                <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-content" style="max-width: 1000px;">
                     <div class="modal-header">
                         <h3>
                             <i class="fas fa-users-cog"></i>
@@ -595,92 +595,141 @@ class EmployeeManager {
                     </div>
                     
                     <div class="modal-body">
-                        <div class="family-info-section">
-                            <h4>Family Information</h4>
-                            <div class="details-grid">
-                                <div class="detail-item">
-                                    <label>Family Name:</label>
-                                    <span>${familyGroup.family_name}</span>
+                        <!-- Family Overview Card -->
+                        <div class="family-overview-card">
+                            <div class="family-header">
+                                <div class="family-avatar">
+                                    <i class="fas fa-users"></i>
                                 </div>
-                                <div class="detail-item">
-                                    <label>Primary Member:</label>
-                                    <span>${primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'Not set'}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Total Members:</label>
-                                    <span>${familyMembers.length}</span>
+                                <div class="family-info">
+                                    <h4>${familyGroup.family_name}</h4>
+                                    <div class="family-stats">
+                                        <span class="stat">
+                                            <i class="fas fa-user-shield"></i>
+                                            Primary: ${primaryMember ? primaryMember.name : 'Not set'}
+                                        </span>
+                                        <span class="stat">
+                                            <i class="fas fa-users"></i>
+                                            Members: ${familyMembers.length}
+                                        </span>
+                                        <span class="stat">
+                                            <i class="fas fa-calendar"></i>
+                                            Created: ${this.formatDate(familyGroup.created_at)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
+                            ${familyGroup.bank_account_number ? `
+                            <div class="bank-info">
+                                <i class="fas fa-university"></i>
+                                <span>${familyGroup.bank_name || 'Bank'} - ${familyGroup.bank_account_number} ${familyGroup.ifsc_code ? `(${familyGroup.ifsc_code})` : ''}</span>
+                            </div>
+                            ` : ''}
                         </div>
 
+                        <!-- Quick Actions -->
+                        <div class="quick-actions-grid">
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroupId}')">
+                                <div class="action-icon add">
+                                    <i class="fas fa-user-plus"></i>
+                                </div>
+                                <span>Add Member</span>
+                            </button>
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.showFamilyGroupModal('${familyGroupId}')">
+                                <div class="action-icon edit">
+                                    <i class="fas fa-edit"></i>
+                                </div>
+                                <span>Edit Family</span>
+                            </button>
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.exportFamilyGroup('${familyGroupId}')">
+                                <div class="action-icon export">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <span>Export Data</span>
+                            </button>
+                        </div>
+
+                        <!-- Members Management Section -->
                         <div class="members-management-section">
                             <div class="section-header">
                                 <h4>Family Members (${familyMembers.length})</h4>
-                                <button class="btn-primary btn-sm" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroupId}')">
-                                    <i class="fas fa-user-plus"></i> Add Member
-                                </button>
+                                <div class="member-actions">
+                                    <button class="btn-primary btn-sm" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroupId}')">
+                                        <i class="fas fa-user-plus"></i> Add Member
+                                    </button>
+                                </div>
                             </div>
                             
                             ${familyMembers.length === 0 ? `
-                                <div class="no-data">
-                                    <i class="fas fa-user-times"></i>
-                                    <br>
-                                    No members in this family group
+                                <div class="no-data-card">
+                                    <div class="no-data-icon">
+                                        <i class="fas fa-user-times"></i>
+                                    </div>
+                                    <h4>No Family Members</h4>
+                                    <p>This family group doesn't have any members yet.</p>
+                                    <button class="btn-primary" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroupId}')">
+                                        <i class="fas fa-user-plus"></i> Add First Member
+                                    </button>
                                 </div>
                             ` : `
-                                <div class="table-responsive">
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Employee ID</th>
-                                                <th>Name</th>
-                                                <th>Role</th>
-                                                <th>Phone</th>
-                                                <th>Status</th>
-                                                <th>Type</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${familyMembers.map(member => `
-                                                <tr>
-                                                    <td><strong>${member.id}</strong></td>
-                                                    <td>${member.name}</td>
-                                                    <td>${member.role}</td>
-                                                    <td>${member.phone || 'N/A'}</td>
-                                                    <td>
-                                                        <span class="status-badge status-${member.status || 'active'}">
-                                                            ${member.status || 'active'}
-                                                        </span>
-                                                    </td>
-                                                    <td>
-                                                        ${member.id === familyGroup.primary_member_id ?
-                '<span class="badge badge-primary">Primary</span>' :
-                '<span class="badge badge-secondary">Member</span>'
-            }
-                                                    </td>
-                                                    <td>
-                                                        <div class="action-buttons">
-                                                            ${member.id !== familyGroup.primary_member_id ? `
-                                                                <button class="btn-danger btn-sm remove-family-member-btn" 
-                                                                        data-employee-id="${member.id}"
-                                                                        data-family-id="${familyGroupId}"
-                                                                        title="Remove from Family">
-                                                                    <i class="fas fa-user-times"></i> Remove
-                                                                </button>
-                                                            ` : `
-                                                                <span class="text-muted">Primary Member</span>
-                                                            `}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
+                                <div class="members-grid">
+                                    ${familyMembers.map(member => `
+                                        <div class="member-card ${member.id === familyGroup.primary_member_id ? 'primary-member' : ''}">
+                                            <div class="member-header">
+                                                <div class="member-avatar">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                                <div class="member-info">
+                                                    <h5>${member.name}</h5>
+                                                    <span class="member-id">${member.id}</span>
+                                                    <span class="member-role">${member.role}</span>
+                                                </div>
+                                                ${member.id === familyGroup.primary_member_id ? `
+                                                    <div class="primary-badge">
+                                                        <i class="fas fa-crown"></i>
+                                                        Primary
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                            <div class="member-details">
+                                                <div class="detail-item">
+                                                    <i class="fas fa-phone"></i>
+                                                    <span>${member.phone || 'No phone'}</span>
+                                                </div>
+                                                <div class="detail-item">
+                                                    <i class="fas fa-calendar"></i>
+                                                    <span>Joined ${this.formatDate(member.join_date)}</span>
+                                                </div>
+                                                <div class="detail-item">
+                                                    <i class="fas fa-circle status-${member.status || 'active'}"></i>
+                                                    <span>${member.status || 'active'}</span>
+                                                </div>
+                                            </div>
+                                            <div class="member-actions">
+                                                ${member.id !== familyGroup.primary_member_id ? `
+                                                    <button class="btn-danger btn-sm remove-family-member-btn" 
+                                                            data-employee-id="${member.id}"
+                                                            data-family-id="${familyGroupId}"
+                                                            title="Remove from Family">
+                                                        <i class="fas fa-user-times"></i> Remove
+                                                    </button>
+                                                    <button class="btn-warning btn-sm make-primary-btn" 
+                                                            data-employee-id="${member.id}"
+                                                            data-family-id="${familyGroupId}"
+                                                            title="Make Primary Member">
+                                                        <i class="fas fa-crown"></i> Make Primary
+                                                    </button>
+                                                ` : `
+                                                    <span class="primary-indicator">Primary Member</span>
+                                                `}
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
                             `}
                         </div>
 
+                        <!-- Change Primary Member Section -->
                         <div class="change-primary-section">
                             <h4>Change Primary Member</h4>
                             <div class="form-group">
@@ -697,6 +746,27 @@ class EmployeeManager {
                                 <i class="fas fa-user-shield"></i> Update Primary Member
                             </button>
                         </div>
+                        <!-- Danger Zone -->
+${familyMembers.length > 0 ? `
+<div class="danger-zone">
+    <h4>
+        <i class="fas fa-exclamation-triangle"></i>
+        Danger Zone
+    </h4>
+    <div class="danger-zone-content">
+        <div class="danger-warning">
+            <i class="fas fa-exclamation-circle"></i>
+            <div class="warning-text">
+                <strong>Delete this family group</strong>
+                <p>This will remove all ${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''} from the family group and delete the family permanently. This action cannot be undone.</p>
+            </div>
+        </div>
+        <button class="btn-danger" onclick="app.getManagers().employee.deleteFamilyGroupFromDetails('${familyGroup.id}')">
+            <i class="fas fa-trash"></i> Delete Family Group
+        </button>
+    </div>
+</div>
+` : ''}
                     </div>
 
                     <div class="modal-actions">
@@ -712,24 +782,31 @@ class EmployeeManager {
         `;
 
         this.showCustomModal(modalHtml, 'manageFamilyMembersModal');
+
+        // Add event listeners for the new buttons
+        setTimeout(() => {
+            document.querySelectorAll('.make-primary-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const employeeId = e.target.closest('.make-primary-btn').getAttribute('data-employee-id');
+                    const familyGroupId = e.target.closest('.make-primary-btn').getAttribute('data-family-id');
+                    this.updatePrimaryMemberImmediate(familyGroupId, employeeId);
+                });
+            });
+        }, 100);
     }
 
-    // NEW: Update primary member
-    async updatePrimaryMember(familyGroupId) {
+    // NEW: Update primary member immediately from card button
+    async updatePrimaryMemberImmediate(familyGroupId, newPrimaryMemberId) {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
             this.ui.showToast('Insufficient permissions to manage family groups', 'error');
             return;
         }
 
-        const newPrimaryMemberId = document.getElementById('newPrimaryMember')?.value;
-        if (!newPrimaryMemberId) {
-            this.ui.showToast('Please select a new primary member', 'error');
-            return;
-        }
-
         const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
-        if (!familyGroup) {
-            this.ui.showToast('Family group not found', 'error');
+        const newPrimaryMember = this.employees.find(emp => emp.id === newPrimaryMemberId);
+
+        if (!familyGroup || !newPrimaryMember) {
+            this.ui.showToast('Family group or member not found', 'error');
             return;
         }
 
@@ -738,15 +815,9 @@ class EmployeeManager {
             return;
         }
 
-        const newPrimaryMember = this.employees.find(emp => emp.id === newPrimaryMemberId);
-        if (!newPrimaryMember) {
-            this.ui.showToast('Selected member not found', 'error');
-            return;
-        }
-
         const confirmation = await this.ui.showConfirmation(
             'Change Primary Member?',
-            `Are you sure you want to make ${newPrimaryMember.name} the primary member of ${familyGroup.family_name}?`,
+            `Are you sure you want to make ${newPrimaryMember.name} the primary member of ${familyGroup.family_name}? The current primary member will be demoted to regular member.`,
             'Change Primary',
             'Cancel'
         );
@@ -774,7 +845,7 @@ class EmployeeManager {
         }
     }
 
-    // NEW: Show modal to add members to existing family
+    // NEW: Show modal to add members to existing family with improved UX
     async showAddMemberToFamilyModal(familyGroupId) {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
             this.ui.showToast('Insufficient permissions to manage family groups', 'error');
@@ -793,7 +864,7 @@ class EmployeeManager {
 
         const modalHtml = `
             <div id="addMemberToFamilyModal" class="modal">
-                <div class="modal-content">
+                <div class="modal-content" style="max-width: 700px;">
                     <div class="modal-header">
                         <h3>
                             <i class="fas fa-user-plus"></i>
@@ -803,25 +874,60 @@ class EmployeeManager {
                     </div>
                     
                     <div class="modal-body">
+                        <div class="family-info-banner">
+                            <div class="family-avatar">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="family-details">
+                                <h4>${familyGroup.family_name}</h4>
+                                <p>Select employees to add to this family group</p>
+                            </div>
+                        </div>
+
                         ${availableEmployees.length === 0 ? `
-                            <div class="no-data">
-                                <i class="fas fa-user-times"></i>
-                                <br>
-                                No available employees to add
-                                <br>
-                                <small>All employees are already in family groups</small>
+                            <div class="no-data-card">
+                                <div class="no-data-icon">
+                                    <i class="fas fa-user-times"></i>
+                                </div>
+                                <h4>No Available Employees</h4>
+                                <p>All employees are already assigned to family groups.</p>
+                                <small>To add employees to this family, first remove them from their current family groups.</small>
                             </div>
                         ` : `
-                            <div class="form-group">
-                                <label>Select Employee to Add</label>
-                                <select id="employeeToAdd" class="form-select">
-                                    <option value="">Select Employee</option>
+                            <div class="available-employees-section">
+                                <h4>Available Employees (${availableEmployees.length})</h4>
+                                <div class="employees-search">
+                                    <div class="search-box">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="availableEmployeesSearch" placeholder="Search employees by name, ID, or role...">
+                                    </div>
+                                </div>
+                                <div class="available-employees-list">
                                     ${availableEmployees.map(emp => `
-                                        <option value="${emp.id}">
-                                            ${emp.name} (${emp.id}) - ${emp.role}
-                                        </option>
+                                        <div class="employee-select-card" data-employee-id="${emp.id}">
+                                            <div class="employee-checkbox">
+                                                <input type="checkbox" id="emp_${emp.id}" value="${emp.id}">
+                                            </div>
+                                            <div class="employee-info">
+                                                <div class="employee-avatar">
+                                                    <i class="fas fa-user-tie"></i>
+                                                </div>
+                                                <div class="employee-details">
+                                                    <h5>${emp.name}</h5>
+                                                    <div class="employee-meta">
+                                                        <span class="employee-id">${emp.id}</span>
+                                                        <span class="employee-role">${emp.role}</span>
+                                                        <span class="employee-type ${emp.employee_type}">${emp.employee_type}</span>
+                                                    </div>
+                                                    <div class="employee-contact">
+                                                        ${emp.phone ? `<span><i class="fas fa-phone"></i> ${emp.phone}</span>` : ''}
+                                                        ${emp.email ? `<span><i class="fas fa-envelope"></i> ${emp.email}</span>` : ''}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     `).join('')}
-                                </select>
+                                </div>
                             </div>
                         `}
                     </div>
@@ -831,8 +937,8 @@ class EmployeeManager {
                             <i class="fas fa-times"></i> Cancel
                         </button>
                         ${availableEmployees.length > 0 ? `
-                            <button class="btn-primary" onclick="app.getManagers().employee.addMemberToFamily('${familyGroupId}')">
-                                <i class="fas fa-user-plus"></i> Add to Family
+                            <button class="btn-primary" onclick="app.getManagers().employee.addSelectedMembersToFamily('${familyGroupId}')">
+                                <i class="fas fa-user-plus"></i> Add Selected Members
                             </button>
                         ` : ''}
                     </div>
@@ -841,36 +947,72 @@ class EmployeeManager {
         `;
 
         this.showCustomModal(modalHtml, 'addMemberToFamilyModal');
+
+        // Add search functionality
+        setTimeout(() => {
+            const searchInput = document.getElementById('availableEmployeesSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase();
+                    const cards = document.querySelectorAll('.employee-select-card');
+
+                    cards.forEach(card => {
+                        const employeeId = card.getAttribute('data-employee-id');
+                        const employee = this.employees.find(emp => emp.id === employeeId);
+                        if (employee) {
+                            const matches = employee.name.toLowerCase().includes(searchTerm) ||
+                                employee.id.toLowerCase().includes(searchTerm) ||
+                                employee.role.toLowerCase().includes(searchTerm);
+                            card.style.display = matches ? 'flex' : 'none';
+                        }
+                    });
+                });
+            }
+        }, 100);
     }
 
-    // NEW: Add member to existing family
-    async addMemberToFamily(familyGroupId) {
+    // NEW: Add multiple selected members to family
+    async addSelectedMembersToFamily(familyGroupId) {
         if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
             this.ui.showToast('Insufficient permissions to manage family groups', 'error');
             return;
         }
 
-        const employeeId = document.getElementById('employeeToAdd')?.value;
-        if (!employeeId) {
-            this.ui.showToast('Please select an employee to add', 'error');
+        const selectedCheckboxes = document.querySelectorAll('.employee-select-card input[type="checkbox"]:checked');
+        if (selectedCheckboxes.length === 0) {
+            this.ui.showToast('Please select at least one employee to add', 'error');
             return;
         }
 
         const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
-        const employee = this.employees.find(emp => emp.id === employeeId);
+        if (!familyGroup) {
+            this.ui.showToast('Family group not found', 'error');
+            return;
+        }
 
-        if (!familyGroup || !employee) {
-            this.ui.showToast('Family group or employee not found', 'error');
+        const selectedEmployeeIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        const selectedEmployees = this.employees.filter(emp => selectedEmployeeIds.includes(emp.id));
+
+        const confirmation = await this.ui.showConfirmation(
+            `Add ${selectedEmployees.length} members to ${familyGroup.family_name}?`,
+            `This will add ${selectedEmployees.map(emp => emp.name).join(', ')} to the family group.`,
+            'Add Members',
+            'Cancel'
+        );
+
+        if (!confirmation) {
             return;
         }
 
         try {
-            await this.db.update('employees', employeeId, {
-                family_group_id: familyGroupId,
-                updated_at: new Date().toISOString()
-            });
+            for (const employee of selectedEmployees) {
+                await this.db.update('employees', employee.id, {
+                    family_group_id: familyGroupId,
+                    updated_at: new Date().toISOString()
+                });
+            }
 
-            this.ui.showToast(`${employee.name} added to ${familyGroup.family_name} successfully`, 'success');
+            this.ui.showToast(`Added ${selectedEmployees.length} members to ${familyGroup.family_name} successfully`, 'success');
 
             // Close the add modal and refresh the management modal
             this.closeAddMemberToFamily();
@@ -878,8 +1020,57 @@ class EmployeeManager {
             this.showManageFamilyMembersModal(familyGroupId);
 
         } catch (error) {
-            console.error('Error adding member to family:', error);
-            this.ui.showToast('Error adding member to family: ' + error.message, 'error');
+            console.error('Error adding members to family:', error);
+            this.ui.showToast('Error adding members to family: ' + error.message, 'error');
+        }
+    }
+
+    // NEW: Export family group data
+    async exportFamilyGroup(familyGroupId) {
+        const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
+        if (!familyGroup) {
+            this.ui.showToast('Family group not found', 'error');
+            return;
+        }
+
+        const familyMembers = this.employees.filter(emp => emp.family_group_id === familyGroupId);
+        const primaryMember = this.employees.find(emp => emp.id === familyGroup.primary_member_id);
+
+        const exportData = [
+            ['Family Group Export', '', '', ''],
+            ['Family Name:', familyGroup.family_name, '', ''],
+            ['Primary Member:', primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'Not set', '', ''],
+            ['Total Members:', familyMembers.length, '', ''],
+            ['Bank Account:', familyGroup.bank_account_number || 'N/A', '', ''],
+            ['Bank Name:', familyGroup.bank_name || 'N/A', '', ''],
+            ['IFSC Code:', familyGroup.ifsc_code || 'N/A', '', ''],
+            ['Created Date:', this.formatDate(familyGroup.created_at), '', ''],
+            ['', '', '', ''],
+            ['Family Members', '', '', ''],
+            ['Employee ID', 'Name', 'Role', 'Phone', 'Status', 'Join Date']
+        ];
+
+        familyMembers.forEach(member => {
+            exportData.push([
+                member.id,
+                member.name,
+                member.role,
+                member.phone || 'N/A',
+                member.status || 'active',
+                this.formatDate(member.join_date)
+            ]);
+        });
+
+        try {
+            if (window.exportManager) {
+                await window.exportManager.exportData(exportData, 'excel', `family_group_${familyGroup.family_name}_${new Date().toISOString().split('T')[0]}`, `${familyGroup.family_name} Family Group`);
+            } else {
+                Utils.exportToExcel(exportData, `family_group_${familyGroup.family_name}`);
+            }
+            this.ui.showToast('Family group data exported successfully', 'success');
+        } catch (error) {
+            console.error('Error exporting family group:', error);
+            this.ui.showToast('Error exporting family group data', 'error');
         }
     }
 
@@ -1011,7 +1202,372 @@ class EmployeeManager {
         console.log('✅ Employees table rendered successfully');
     }
 
-    // ENHANCED FAMILY GROUP DETAILS MODAL WITH MANAGEMENT OPTIONS
+    // ENHANCED: Show manage family groups modal with delete functionality
+    showManageFamilyGroupsModal() {
+        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
+            this.ui.showToast('Insufficient permissions to manage family groups', 'error');
+            return;
+        }
+
+        const modalHtml = `
+            <div id="manageFamilyGroupsModal" class="modal">
+                <div class="modal-content" style="max-width: 1200px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-users"></i> Manage Family Groups</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        ${this.familyGroups.length === 0 ? `
+                            <div class="no-data-card">
+                                <div class="no-data-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <h4>No Family Groups</h4>
+                                <p>You haven't created any family groups yet.</p>
+                                <button class="btn-primary" onclick="app.getManagers().employee.showFamilyGroupModal()" style="margin-top: 10px;">
+                                    <i class="fas fa-plus"></i> Create First Family Group
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="family-groups-header">
+                                <div class="summary-stats">
+                                    <div class="stat-card">
+                                        <div class="stat-icon">
+                                            <i class="fas fa-users"></i>
+                                        </div>
+                                        <div class="stat-info">
+                                            <div class="stat-value">${this.familyGroups.length}</div>
+                                            <div class="stat-label">Total Families</div>
+                                        </div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-icon">
+                                            <i class="fas fa-user-tie"></i>
+                                        </div>
+                                        <div class="stat-info">
+                                            <div class="stat-value">${this.employees.filter(emp => emp.family_group_id).length}</div>
+                                            <div class="stat-label">Employees in Families</div>
+                                        </div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-icon">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                        <div class="stat-info">
+                                            <div class="stat-value">${this.employees.filter(emp => !emp.family_group_id).length}</div>
+                                            <div class="stat-label">Unassigned Employees</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="family-groups-grid">
+                                ${this.familyGroups.map(familyGroup => {
+            const primaryMember = this.employees.find(emp => emp.id === familyGroup.primary_member_id);
+            const totalMembers = this.employees.filter(emp => emp.family_group_id === familyGroup.id).length;
+            const hasBankInfo = familyGroup.bank_account_number || familyGroup.bank_name || familyGroup.ifsc_code;
+
+            return `
+                                        <div class="family-group-card">
+                                            <div class="family-group-header">
+                                                <div class="family-avatar ${totalMembers === 0 ? 'empty' : ''}">
+                                                    <i class="fas fa-users"></i>
+                                                    ${totalMembers > 0 ? `<span class="member-count">${totalMembers}</span>` : ''}
+                                                </div>
+                                                <div class="family-group-info">
+                                                    <h4>${familyGroup.family_name}</h4>
+                                                    <div class="family-group-meta">
+                                                        <span class="primary-member">
+                                                            <i class="fas fa-user-shield"></i>
+                                                            ${primaryMember ? primaryMember.name : 'No primary member'}
+                                                        </span>
+                                                        <span class="members-count">
+                                                            <i class="fas fa-users"></i>
+                                                            ${totalMembers} member${totalMembers !== 1 ? 's' : ''}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div class="family-group-status ${totalMembers === 0 ? 'empty' : 'active'}">
+                                                    ${totalMembers === 0 ? 'Empty' : 'Active'}
+                                                </div>
+                                            </div>
+                                            <div class="family-group-details">
+                                                ${hasBankInfo ? `
+                                                <div class="bank-info">
+                                                    <i class="fas fa-university"></i>
+                                                    ${familyGroup.bank_account_number || 'No account'} 
+                                                    ${familyGroup.bank_name ? `- ${familyGroup.bank_name}` : ''}
+                                                    ${familyGroup.ifsc_code ? `(${familyGroup.ifsc_code})` : ''}
+                                                </div>
+                                                ` : `
+                                                <div class="no-bank-info">
+                                                    <i class="fas fa-university"></i>
+                                                    No bank information
+                                                </div>
+                                                `}
+                                                <div class="created-date">
+                                                    <i class="fas fa-calendar"></i>
+                                                    Created ${this.formatDate(familyGroup.created_at)}
+                                                </div>
+                                            </div>
+                                            <div class="family-group-actions">
+                                                <button class="btn-secondary btn-sm view-family-group-btn" data-family-id="${familyGroup.id}" title="View Details">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn-secondary btn-sm edit-family-group-btn" data-family-id="${familyGroup.id}" title="Edit Family">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn-warning btn-sm manage-members-btn" data-family-id="${familyGroup.id}" title="Manage Members">
+                                                    <i class="fas fa-users-cog"></i>
+                                                </button>
+                                                <button class="btn-danger btn-sm delete-family-group-btn" data-family-id="${familyGroup.id}" title="Delete Family">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+        }).join('')}
+                            </div>
+                        `}
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" onclick="app.getManagers().employee.closeManageFamilyGroups()">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                        <button class="btn-primary" onclick="app.getManagers().employee.showFamilyGroupModal()">
+                            <i class="fas fa-plus"></i> Create New Family Group
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'manageFamilyGroupsModal');
+
+        // Add event listeners for the new buttons
+        setTimeout(() => {
+            // Manage members button
+            document.querySelectorAll('.manage-members-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const familyGroupId = e.target.closest('.manage-members-btn').getAttribute('data-family-id');
+                    this.showManageFamilyMembersModal(familyGroupId);
+                });
+            });
+
+            // Delete family group button
+            document.querySelectorAll('.delete-family-group-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const familyGroupId = e.target.closest('.delete-family-group-btn').getAttribute('data-family-id');
+                    this.deleteFamilyGroupWithConfirmation(familyGroupId);
+                });
+            });
+        }, 100);
+    }
+
+    // ENHANCED: Delete family group with comprehensive confirmation and proper cleanup
+    async deleteFamilyGroupWithConfirmation(familyGroupId) {
+        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
+            this.ui.showToast('Insufficient permissions to delete family groups', 'error');
+            return;
+        }
+
+        const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
+        if (!familyGroup) {
+            this.ui.showToast('Family group not found', 'error');
+            return;
+        }
+
+        const familyMembers = this.employees.filter(emp => emp.family_group_id === familyGroupId);
+
+        // Create confirmation message based on member count
+        let confirmationMessage = '';
+        let confirmButtonText = 'Delete Family';
+
+        if (familyMembers.length === 0) {
+            confirmationMessage = `Are you sure you want to delete the family group "${familyGroup.family_name}"? This family group has no members.`;
+            confirmButtonText = 'Delete Empty Family';
+        } else {
+            const memberNames = familyMembers.slice(0, 3).map(member => member.name).join(', ');
+            const moreText = familyMembers.length > 3 ? ` and ${familyMembers.length - 3} more members` : '';
+            confirmationMessage = `Are you sure you want to delete the family group "${familyGroup.family_name}"? This will remove <strong>${memberNames}${moreText}</strong> from the family group.`;
+            confirmButtonText = `Delete Family (${familyMembers.length} members)`;
+        }
+
+        const confirmation = await this.ui.showConfirmation(
+            `Delete ${familyGroup.family_name}?`,
+            confirmationMessage,
+            confirmButtonText,
+            'Cancel',
+            'warning'
+        );
+
+        if (!confirmation) {
+            return;
+        }
+
+        try {
+            // Show loading state
+            this.ui.showToast(`Deleting ${familyGroup.family_name}...`, 'info');
+
+            // 🚨 CRITICAL FIX: Remove family group from all employees first
+            console.log(`🔄 Removing family group from ${familyMembers.length} employees...`);
+
+            for (const employee of familyMembers) {
+                await this.db.update('employees', employee.id, {
+                    family_group_id: null,
+                    updated_at: new Date().toISOString()
+                });
+            }
+
+            console.log(`✅ All employees updated, now deleting family group ${familyGroupId}`);
+
+            // 🚨 ADD DELAY to ensure database updates are committed
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Delete the family group
+            await this.db.delete('family_groups', familyGroupId);
+
+            this.ui.showToast(`Family group "${familyGroup.family_name}" deleted successfully`, 'success');
+
+            // 🚨 CRITICAL: Reload data
+            await this.loadFamilyGroups();
+            await this.loadEmployees();
+
+            // 🚨 CRITICAL: Refresh the modal
+            this.showManageFamilyGroupsModal();
+
+        } catch (error) {
+            console.error('❌ Error deleting family group:', error);
+
+            if (error.message.includes('foreign key constraint') || error.message.includes('violates foreign key')) {
+                this.ui.showToast('Cannot delete family group: Some employees are still linked. Please refresh and try again.', 'error');
+
+                // Force reload to ensure data consistency
+                await this.loadFamilyGroups();
+                await this.loadEmployees();
+            } else {
+                this.ui.showToast('Error deleting family group: ' + error.message, 'error');
+            }
+        }
+    }
+
+    // REAL SOLUTION: Handle missing employees and database constraints
+    async deleteFamilyGroupFromDetails(familyGroupId) {
+        if (!this.auth.hasPermission('admin')) {
+            this.ui.showToast('Admin permissions required for this operation', 'error');
+            return;
+        }
+
+        const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
+        if (!familyGroup) {
+            this.ui.showToast('Family group not found', 'error');
+            return;
+        }
+
+        const familyMembers = this.employees.filter(emp => emp.family_group_id === familyGroupId);
+
+        const confirmation = await this.ui.showConfirmation(
+            `DELETE ${familyGroup.family_name}?`,
+            `This will permanently delete the family group. ${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''} will be unlinked.`,
+            `DELETE FAMILY`,
+            'Cancel',
+            'danger'
+        );
+
+        if (!confirmation) return;
+
+        try {
+            this.ui.showToast('Deleting family group...', 'info');
+
+            // STEP 1: Remove primary member constraint first
+            console.log('🔄 Removing primary member constraint...');
+            await this.db.update('family_groups', familyGroupId, {
+                primary_member_id: null,
+                updated_at: new Date().toISOString()
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // STEP 2: Unlink ONLY employees that actually exist
+            console.log('🔄 Unlinking employees...');
+            let successfulUnlinks = 0;
+
+            for (const employee of familyMembers) {
+                try {
+                    // Check if employee actually exists before trying to update
+                    const employeeExists = this.employees.find(emp => emp.id === employee.id);
+                    if (!employeeExists) {
+                        console.warn(`⚠️ Employee ${employee.id} not found in database, skipping...`);
+                        continue;
+                    }
+
+                    await this.db.update('employees', employee.id, {
+                        family_group_id: null,
+                        updated_at: new Date().toISOString()
+                    });
+                    successfulUnlinks++;
+                    console.log(`✅ Unlinked ${employee.id}`);
+                } catch (error) {
+                    console.warn(`⚠️ Failed to unlink ${employee.id}:`, error.message);
+                    // Continue with other employees even if one fails
+                }
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+
+            console.log(`✅ Successfully unlinked ${successfulUnlinks} employees`);
+
+            // STEP 3: Try to delete family group
+            console.log('🗑️ Deleting family group...');
+            try {
+                await this.db.delete('family_groups', familyGroupId);
+                console.log('✅ Family group deleted successfully');
+            } catch (deleteError) {
+                console.error('❌ Family group deletion failed:', deleteError);
+
+                // If deletion fails due to constraint, show specific message
+                if (deleteError.message.includes('foreign key constraint')) {
+                    throw new Error('DATABASE CONSTRAINT: Cannot delete family group. Some employees are still linked in the database. Please contact database administrator.');
+                }
+                throw deleteError;
+            }
+
+            // STEP 4: Verify deletion and update UI
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await this.loadFamilyGroups();
+
+            const familyGroupStillExists = this.familyGroups.find(fg => fg.id === familyGroupId);
+            if (familyGroupStillExists) {
+                throw new Error('Family group still exists after deletion. Please refresh and try again.');
+            }
+
+            // SUCCESS
+            this.ui.showToast(`Family group "${familyGroup.family_name}" deleted successfully`, 'success');
+
+            this.closeFamilyGroupDetails();
+            this.closeManageFamilyMembers();
+
+            await this.loadFamilyGroups();
+            await this.loadEmployees();
+
+        } catch (error) {
+            console.error('💥 Deletion failed:', error);
+
+            if (error.message.includes('DATABASE CONSTRAINT')) {
+                this.ui.showToast(error.message, 'error');
+            } else if (error.message.includes('foreign key')) {
+                this.ui.showToast('Database constraint error. Cannot delete family group while employees are linked.', 'error');
+            } else {
+                this.ui.showToast('Error deleting family group: ' + error.message, 'error');
+            }
+
+            await this.loadFamilyGroups();
+            await this.loadEmployees();
+        }
+    }
+
+    // ENHANCED: Show family group details with delete option
     showFamilyGroupDetails(familyGroupId) {
         const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
         if (!familyGroup) {
@@ -1024,95 +1580,166 @@ class EmployeeManager {
 
         const modalHtml = `
             <div id="familyGroupDetailsModal" class="modal">
-                <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-content" style="max-width: 1000px;">
                     <div class="modal-header">
                         <h3><i class="fas fa-users"></i> Family Group Details - ${familyGroup.family_name}</h3>
                         <button class="modal-close">&times;</button>
                     </div>
                     
                     <div class="family-details-container">
-                        <div class="details-section">
-                            <h4>Family Information</h4>
-                            <div class="details-grid">
-                                <div class="detail-item">
-                                    <label>Family Name:</label>
-                                    <span>${familyGroup.family_name}</span>
+                        <!-- Family Overview -->
+                        <div class="family-overview-card">
+                            <div class="family-header">
+                                <div class="family-avatar large ${familyMembers.length === 0 ? 'empty' : ''}">
+                                    <i class="fas fa-users"></i>
+                                    ${familyMembers.length > 0 ? `<span class="member-count">${familyMembers.length}</span>` : ''}
                                 </div>
-                                <div class="detail-item">
-                                    <label>Primary Member:</label>
-                                    <span>${primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'N/A'}</span>
+                                <div class="family-info">
+                                    <h4>${familyGroup.family_name}</h4>
+                                    <div class="family-stats">
+                                        <span class="stat">
+                                            <i class="fas fa-user-shield"></i>
+                                            Primary: ${primaryMember ? primaryMember.name : 'Not set'}
+                                        </span>
+                                        <span class="stat">
+                                            <i class="fas fa-users"></i>
+                                            Members: ${familyMembers.length}
+                                        </span>
+                                        <span class="stat">
+                                            <i class="fas fa-calendar"></i>
+                                            Created: ${this.formatDate(familyGroup.created_at)}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="detail-item">
-                                    <label>Total Members:</label>
-                                    <span>${familyMembers.length}</span>
-                                </div>
-                                ${familyGroup.bank_account_number ? `
-                                <div class="detail-item">
-                                    <label>Bank Account:</label>
-                                    <span>${familyGroup.bank_account_number}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.bank_name ? `
-                                <div class="detail-item">
-                                    <label>Bank Name:</label>
-                                    <span>${familyGroup.bank_name}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.ifsc_code ? `
-                                <div class="detail-item">
-                                    <label>IFSC Code:</label>
-                                    <span>${familyGroup.ifsc_code}</span>
-                                </div>
-                                ` : ''}
-                                <div class="detail-item">
-                                    <label>Created Date:</label>
-                                    <span>${this.formatDate(familyGroup.created_at)}</span>
+                                <div class="family-status ${familyMembers.length === 0 ? 'empty' : 'active'}">
+                                    ${familyMembers.length === 0 ? 'Empty Family' : 'Active Family'}
                                 </div>
                             </div>
+                            ${familyGroup.bank_account_number ? `
+                            <div class="bank-info">
+                                <i class="fas fa-university"></i>
+                                <span>${familyGroup.bank_name || 'Bank'} - ${familyGroup.bank_account_number} ${familyGroup.ifsc_code ? `(${familyGroup.ifsc_code})` : ''}</span>
+                            </div>
+                            ` : `
+                            <div class="no-bank-info">
+                                <i class="fas fa-university"></i>
+                                <span>No bank information provided</span>
+                            </div>
+                            `}
                         </div>
 
+                        <!-- Quick Actions -->
+                        <div class="quick-actions-grid">
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.showManageFamilyMembersModal('${familyGroup.id}')">
+                                <div class="action-icon members">
+                                    <i class="fas fa-users-cog"></i>
+                                </div>
+                                <span>Manage Members</span>
+                            </button>
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.showFamilyGroupModal('${familyGroup.id}')">
+                                <div class="action-icon edit">
+                                    <i class="fas fa-edit"></i>
+                                </div>
+                                <span>Edit Family</span>
+                            </button>
+                            <button class="quick-action-btn" onclick="app.getManagers().employee.exportFamilyGroup('${familyGroup.id}')">
+                                <div class="action-icon export">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <span>Export Data</span>
+                            </button>
+                            ${familyMembers.length === 0 ? `
+                            <button class="quick-action-btn danger" onclick="app.getManagers().employee.deleteFamilyGroupFromDetails('${familyGroup.id}')">
+                                <div class="action-icon delete">
+                                    <i class="fas fa-trash"></i>
+                                </div>
+                                <span>Delete Family</span>
+                            </button>
+                            ` : ''}
+                        </div>
+
+                        <!-- Members Section -->
                         <div class="details-section">
-                            <h4>Family Members (${familyMembers.length})</h4>
-                            ${familyMembers.length > 0 ? `
-                                <div class="members-table">
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Employee ID</th>
-                                                <th>Name</th>
-                                                <th>Role</th>
-                                                <th>Phone</th>
-                                                <th>Status</th>
-                                                <th>Type</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${familyMembers.map(member => `
-                                                <tr>
-                                                    <td><strong>${member.id}</strong></td>
-                                                    <td>${member.name}</td>
-                                                    <td>${member.role}</td>
-                                                    <td>${member.phone || 'N/A'}</td>
-                                                    <td><span class="status-badge status-${member.status || 'active'}">${member.status || 'active'}</span></td>
-                                                    <td>
-                                                        ${member.id === familyGroup.primary_member_id ?
-                '<span class="badge badge-primary">Primary</span>' :
-                '<span class="badge badge-secondary">Member</span>'
-            }
-                                                    </td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
+                            <div class="section-header">
+                                <h4>Family Members (${familyMembers.length})</h4>
+                                <button class="btn-primary btn-sm" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroup.id}')">
+                                    <i class="fas fa-user-plus"></i> Add Member
+                                </button>
+                            </div>
+                            
+                            ${familyMembers.length === 0 ? `
+                                <div class="no-data-card">
+                                    <div class="no-data-icon">
+                                        <i class="fas fa-user-times"></i>
+                                    </div>
+                                    <h4>No Family Members</h4>
+                                    <p>This family group doesn't have any members yet.</p>
+                                    <div class="no-data-actions">
+                                        <button class="btn-primary" onclick="app.getManagers().employee.showAddMemberToFamilyModal('${familyGroup.id}')">
+                                            <i class="fas fa-user-plus"></i> Add First Member
+                                        </button>
+                                        <button class="btn-danger" onclick="app.getManagers().employee.deleteFamilyGroupFromDetails('${familyGroup.id}')">
+                                            <i class="fas fa-trash"></i> Delete Empty Family
+                                        </button>
+                                    </div>
                                 </div>
                             ` : `
-                                <div class="no-data">
-                                    <i class="fas fa-user-times"></i>
-                                    <br>
-                                    No members in this family group
+                                <div class="members-grid compact">
+                                    ${familyMembers.map(member => `
+                                        <div class="member-card compact ${member.id === familyGroup.primary_member_id ? 'primary-member' : ''}">
+                                            <div class="member-header">
+                                                <div class="member-avatar">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                                <div class="member-info">
+                                                    <h5>${member.name}</h5>
+                                                    <span class="member-id">${member.id}</span>
+                                                    <span class="member-role">${member.role}</span>
+                                                </div>
+                                                ${member.id === familyGroup.primary_member_id ? `
+                                                    <div class="primary-badge">
+                                                        <i class="fas fa-crown"></i>
+                                                        Primary
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                            <div class="member-details">
+                                                <div class="detail-item">
+                                                    <i class="fas fa-phone"></i>
+                                                    <span>${member.phone || 'No phone'}</span>
+                                                </div>
+                                                <div class="detail-item">
+                                                    <i class="fas fa-circle status-${member.status || 'active'}"></i>
+                                                    <span>${member.status || 'active'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
                             `}
                         </div>
+
+                        <!-- Danger Zone -->
+${familyMembers.length > 0 ? `
+<div class="danger-zone">
+    <h4>
+        <i class="fas fa-exclamation-triangle"></i>
+        Danger Zone
+    </h4>
+    <div class="danger-zone-content">
+        <div class="danger-warning">
+            <i class="fas fa-exclamation-circle"></i>
+            <div class="warning-text">
+                <strong>Delete this family group</strong>
+                <p>This will remove all ${familyMembers.length} member${familyMembers.length !== 1 ? 's' : ''} from the family group and delete the family permanently. This action cannot be undone.</p>
+            </div>
+        </div>
+        <button class="btn-danger" onclick="app.getManagers().employee.deleteFamilyGroupFromDetails('${familyGroup.id}')">
+            <i class="fas fa-trash"></i> Delete Family Group
+        </button>
+    </div>
+</div>
+` : ''}
                     </div>
 
                     <div class="modal-actions">
@@ -1133,10 +1760,206 @@ class EmployeeManager {
         this.showCustomModal(modalHtml, 'familyGroupDetailsModal');
     }
 
+    // ENHANCED: Delete empty family groups in bulk
+    async deleteEmptyFamilyGroups() {
+        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
+            this.ui.showToast('Insufficient permissions to delete family groups', 'error');
+            return;
+        }
 
-    // Add this method to handle the manage family members button
-    handleManageFamilyMembers(familyGroupId) {
-        this.showManageFamilyMembersModal(familyGroupId);
+        const emptyFamilyGroups = this.familyGroups.filter(familyGroup => {
+            const members = this.employees.filter(emp => emp.family_group_id === familyGroup.id);
+            return members.length === 0;
+        });
+
+        if (emptyFamilyGroups.length === 0) {
+            this.ui.showToast('No empty family groups found', 'info');
+            return;
+        }
+
+        const confirmation = await this.ui.showConfirmation(
+            'Delete Empty Family Groups?',
+            `This will permanently delete ${emptyFamilyGroups.length} empty family group${emptyFamilyGroups.length !== 1 ? 's' : ''}. This action cannot be undone.`,
+            `Delete ${emptyFamilyGroups.length} Empty Families`,
+            'Cancel',
+            'danger'
+        );
+
+        if (!confirmation) {
+            return;
+        }
+
+        try {
+            this.ui.showToast(`Deleting ${emptyFamilyGroups.length} empty family groups...`, 'info');
+
+            for (const familyGroup of emptyFamilyGroups) {
+                await this.db.delete('family_groups', familyGroup.id);
+            }
+
+            this.ui.showToast(`Successfully deleted ${emptyFamilyGroups.length} empty family groups`, 'success');
+
+            // Reload data
+            await this.loadFamilyGroups();
+            await this.loadEmployees();
+
+            // Refresh the modal if it's open
+            const modal = document.getElementById('manageFamilyGroupsModal');
+            if (modal) {
+                this.showManageFamilyGroupsModal();
+            }
+
+        } catch (error) {
+            console.error('Error deleting empty family groups:', error);
+            this.ui.showToast('Error deleting empty family groups: ' + error.message, 'error');
+        }
+    }
+
+    // Add bulk delete option to manage family groups modal
+    showFamilyManagementTools() {
+        const emptyFamilyCount = this.familyGroups.filter(fg => {
+            const members = this.employees.filter(emp => emp.family_group_id === fg.id);
+            return members.length === 0;
+        }).length;
+
+        const modalHtml = `
+            <div id="familyManagementToolsModal" class="modal">
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-tools"></i> Family Management Tools</h3>
+                        <button class="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="tools-grid">
+                            <div class="tool-card">
+                                <div class="tool-icon danger">
+                                    <i class="fas fa-trash"></i>
+                                </div>
+                                <div class="tool-info">
+                                    <h4>Delete Empty Families</h4>
+                                    <p>Remove all family groups that have no members</p>
+                                    <div class="tool-stats">
+                                        <span class="stat">${emptyFamilyCount} empty families found</span>
+                                    </div>
+                                </div>
+                                <button class="btn-danger" onclick="app.getManagers().employee.deleteEmptyFamilyGroups()" ${emptyFamilyCount === 0 ? 'disabled' : ''}>
+                                    Clean Up
+                                </button>
+                            </div>
+
+                            <div class="tool-card">
+                                <div class="tool-icon export">
+                                    <i class="fas fa-download"></i>
+                                </div>
+                                <div class="tool-info">
+                                    <h4>Export All Families</h4>
+                                    <p>Download complete family data including all members</p>
+                                    <div class="tool-stats">
+                                        <span class="stat">${this.familyGroups.length} total families</span>
+                                    </div>
+                                </div>
+                                <button class="btn-primary" onclick="app.getManagers().employee.exportAllFamilyGroups()">
+                                    Export All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn-secondary" onclick="app.getManagers().employee.closeFamilyManagementTools()">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        this.showCustomModal(modalHtml, 'familyManagementToolsModal');
+    }
+
+    // Export all family groups
+    async exportAllFamilyGroups() {
+        try {
+            const exportData = [
+                ['All Family Groups Export', '', '', '', ''],
+                ['Export Date:', new Date().toLocaleDateString(), '', '', ''],
+                ['Total Families:', this.familyGroups.length, '', '', ''],
+                ['Total Employees in Families:', this.employees.filter(emp => emp.family_group_id).length, '', '', ''],
+                ['', '', '', '', ''],
+                ['Family Groups', '', '', '', ''],
+                ['Family Name', 'Primary Member', 'Total Members', 'Bank Account', 'Created Date']
+            ];
+
+            this.familyGroups.forEach(familyGroup => {
+                const primaryMember = this.employees.find(emp => emp.id === familyGroup.primary_member_id);
+                const totalMembers = this.employees.filter(emp => emp.family_group_id === familyGroup.id).length;
+
+                exportData.push([
+                    familyGroup.family_name,
+                    primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'Not set',
+                    totalMembers,
+                    familyGroup.bank_account_number || 'N/A',
+                    this.formatDate(familyGroup.created_at)
+                ]);
+
+                // Add members for this family
+                if (totalMembers > 0) {
+                    exportData.push(['', 'Family Members:', '', '', '']);
+                    exportData.push(['Employee ID', 'Name', 'Role', 'Phone', 'Status']);
+
+                    const familyMembers = this.employees.filter(emp => emp.family_group_id === familyGroup.id);
+                    familyMembers.forEach(member => {
+                        exportData.push([
+                            member.id,
+                            member.name,
+                            member.role,
+                            member.phone || 'N/A',
+                            member.status || 'active'
+                        ]);
+                    });
+
+                    exportData.push(['', '', '', '', '']);
+                }
+            });
+
+            if (window.exportManager) {
+                await window.exportManager.exportData(exportData, 'excel', `all_family_groups_${new Date().toISOString().split('T')[0]}`, 'All Family Groups Export');
+            } else {
+                Utils.exportToExcel(exportData, `all_family_groups`);
+            }
+            this.ui.showToast('All family groups exported successfully', 'success');
+        } catch (error) {
+            console.error('Error exporting all family groups:', error);
+            this.ui.showToast('Error exporting family groups data', 'error');
+        }
+    }
+
+    closeFamilyManagementTools() {
+        this.ui.hideModal('familyManagementToolsModal');
+        const modal = document.getElementById('familyManagementToolsModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    // ENHANCED: Close family group details modal
+    closeFamilyGroupDetails() {
+        const modal = document.getElementById('familyGroupDetailsModal');
+        if (modal) {
+            this.ui.hideModal('familyGroupDetailsModal');
+            // 🚨 Force remove from DOM to prevent stale data
+            modal.remove();
+        }
+    }
+
+    // ENHANCED: Close manage family groups modal
+    closeManageFamilyGroups() {
+        const modal = document.getElementById('manageFamilyGroupsModal');
+        if (modal) {
+            this.ui.hideModal('manageFamilyGroupsModal');
+            // 🚨 Force remove from DOM to prevent stale data
+            modal.remove();
+        }
     }
 
     async handleStatusToggle(employeeId, currentStatus) {
@@ -1457,118 +2280,6 @@ class EmployeeManager {
         }
     }
 
-    // ENHANCED RENDER FUNCTION WITH FAMILY GROUP SUPPORT
-    renderEmployeesTable(employees) {
-        const tbody = document.getElementById('employeesTableBody');
-        if (!tbody) {
-            console.error('❌ employeesTableBody not found in DOM');
-            return;
-        }
-
-        console.log('🎨 Rendering employees table with:', employees.length, 'employees');
-
-        if (employees.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="11" class="no-data">
-                        <i class="fas fa-user-tie"></i>
-                        <br>
-                        ${this.currentSearchTerm ?
-                    'No employees found matching your search' :
-                    'No employees found'
-                }
-                        ${this.currentSearchTerm ? `
-                            <br>
-                            <button class="btn-primary btn-sm" onclick="app.getManagers().employee.clearSearch()" style="margin-top: 10px;">
-                                <i class="fas fa-times"></i> Clear Search
-                            </button>
-                        ` : ''}
-                        ${!this.currentSearchTerm ? `
-                            <br>
-                            <button class="btn-primary btn-sm" onclick="app.getManagers().employee.showAddEmployeeModal()" style="margin-top: 10px;">
-                                <i class="fas fa-plus"></i> Add First Employee
-                            </button>
-                        ` : ''}
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        tbody.innerHTML = employees.map(employee => {
-            const pendingAdvances = this.calculatePendingAdvances(employee.id);
-            const familyGroup = this.familyGroups.find(fg => fg.id === employee.family_group_id);
-
-            console.log(`👤 Rendering employee ${employee.id}:`, {
-                name: employee.name,
-                family_group_id: employee.family_group_id,
-                familyGroup: familyGroup
-            });
-
-            return `
-                <tr class="employee-row" data-employee-id="${employee.id}">
-                    <td><strong>${employee.id || 'N/A'}</strong></td>
-                    <td>${employee.name || 'N/A'}</td>
-                    <td>${employee.phone || 'N/A'}</td>
-                    <td>
-                        <span class="badge ${employee.employee_type === 'driver' ? 'badge-driver' : 'badge-employee'}">
-                            ${employee.employee_type === 'driver' ? 'Driver' : 'Employee'}
-                        </span>
-                    </td>
-                    <td>
-                        <div class="status-container" style="display: flex; align-items: center; gap: 8px;">
-                            <span class="status-badge status-${employee.status || 'active'}">
-                                ${employee.status || 'active'}
-                            </span>
-                            <button class="btn-icon status-toggle-btn" 
-                                    data-employee-id="${employee.id}"
-                                    data-current-status="${employee.status || 'active'}"
-                                    title="Toggle Status between Active and Inactive"
-                                    type="button">
-                                <i class="fas fa-sync-alt"></i>
-                            </button>
-                        </div>
-                    </td>
-                    <td>${employee.role || 'N/A'}</td>
-                    <td>${this.formatDate(employee.join_date)}</td>
-                    <td>
-                        ${familyGroup ?
-                    `<div class="family-group-cell">
-                                <span class="family-badge" title="${familyGroup.family_name}">
-                                    <i class="fas fa-users"></i> ${familyGroup.family_name}
-                                </span>
-                                <button class="btn-icon remove-family-group-btn" 
-                                        data-employee-id="${employee.id}"
-                                        title="Remove from Family Group"
-                                        type="button">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>` :
-                    `<button class="btn-secondary btn-sm assign-family-group-btn" 
-                             data-employee-id="${employee.id}"
-                             title="Assign to Family Group">
-                        <i class="fas fa-user-plus"></i> Assign
-                    </button>`
-                }
-                    </td>
-                    <td>${this.formatCurrency(pendingAdvances)}</td>
-                    <td>
-                        <div class="action-buttons">
-                            <button class="btn-secondary btn-sm view-details-btn" data-employee-id="${employee.id}" type="button">
-                                <i class="fas fa-eye"></i> Details
-                            </button>
-                            <button class="btn-secondary btn-sm" onclick="app.getManagers().employee.editEmployee('${employee.id}')" type="button">
-                                <i class="fas fa-edit"></i> Edit
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        console.log('✅ Employees table rendered successfully');
-    }
-
     calculatePendingAdvances(employeeId) {
         const employeeAdvances = this.simpleAdvances.filter(advance =>
             advance.employee_id === employeeId && !advance.paid
@@ -1661,124 +2372,99 @@ class EmployeeManager {
                     </div>
                     
                     <div class="employee-details-container">
-                        <div class="details-section">
-                            <h4>Basic Information</h4>
-                            <div class="details-grid">
-                                <div class="detail-item">
-                                    <label>Employee ID:</label>
-                                    <span>${employee.id}</span>
+                        <div class="employee-overview-card">
+                            <div class="employee-header">
+                                <div class="employee-avatar large">
+                                    <i class="fas fa-user-tie"></i>
                                 </div>
-                                <div class="detail-item">
-                                    <label>Name:</label>
-                                    <span>${employee.name}</span>
+                                <div class="employee-info">
+                                    <h4>${employee.name}</h4>
+                                    <div class="employee-meta">
+                                        <span class="employee-id">${employee.id}</span>
+                                        <span class="employee-role">${employee.role}</span>
+                                        <span class="employee-type ${employee.employee_type}">${employee.employee_type}</span>
+                                    </div>
+                                    <div class="employee-stats">
+                                        <span class="stat">
+                                            <i class="fas fa-calendar"></i>
+                                            Joined: ${this.formatDate(employee.join_date)}
+                                        </span>
+                                        <span class="stat">
+                                            <i class="fas fa-circle status-${employee.status || 'active'}"></i>
+                                            ${employee.status || 'active'}
+                                        </span>
+                                        ${employee.phone ? `
+                                        <span class="stat">
+                                            <i class="fas fa-phone"></i>
+                                            ${employee.phone}
+                                        </span>
+                                        ` : ''}
+                                    </div>
                                 </div>
-                                <div class="detail-item">
-                                    <label>Role:</label>
-                                    <span>${employee.role}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Type:</label>
-                                    <span class="badge ${employee.employee_type === 'driver' ? 'badge-driver' : 'badge-employee'}">
-                                        ${employee.employee_type === 'driver' ? 'Driver' : 'Employee'}
-                                    </span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Phone:</label>
-                                    <span>${employee.phone || 'N/A'}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Email:</label>
-                                    <span>${employee.email || 'N/A'}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Join Date:</label>
-                                    <span>${this.formatDate(employee.join_date)}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Status:</label>
-                                    <span class="status-badge status-${employee.status || 'active'}">
-                                        ${employee.status || 'active'}
-                                    </span>
-                                </div>
-                                ${employee.vehicle_number ? `
-                                <div class="detail-item">
-                                    <label>Vehicle Number:</label>
-                                    <span>${employee.vehicle_number}</span>
-                                </div>
-                                ` : ''}
                             </div>
                         </div>
 
                         ${familyGroup ? `
-                        <div class="details-section">
-                            <h4>Family Group Information</h4>
-                            <div class="details-grid">
-                                <div class="detail-item">
-                                    <label>Family Name:</label>
-                                    <span>${familyGroup.family_name}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Primary Member:</label>
-                                    <span>${employee.id === familyGroup.primary_member_id ? 'Yes' : 'No'}</span>
-                                </div>
-                                ${familyGroup.bank_account_number ? `
-                                <div class="detail-item">
-                                    <label>Bank Account:</label>
-                                    <span>${familyGroup.bank_account_number}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.bank_name ? `
-                                <div class="detail-item">
-                                    <label>Bank Name:</label>
-                                    <span>${familyGroup.bank_name}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.ifsc_code ? `
-                                <div class="detail-item">
-                                    <label>IFSC Code:</label>
-                                    <span>${familyGroup.ifsc_code}</span>
-                                </div>
-                                ` : ''}
-                            </div>
-                            
-                            ${familyMembers.length > 0 ? `
-                            <div class="family-members">
-                                <h5>Family Members (${familyMembers.length}):</h5>
-                                <div class="members-list">
-                                    ${familyMembers.map(member => `
-                                        <div class="member-item">
-                                            <i class="fas fa-user"></i>
-                                            <span>${member.name} (${member.id})</span>
-                                            <span class="member-role">${member.role}</span>
+                        <div class="family-section">
+                            <h4>Family Group</h4>
+                            <div class="family-card">
+                                <div class="family-header">
+                                    <div class="family-avatar">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+                                    <div class="family-info">
+                                        <h5>${familyGroup.family_name}</h5>
+                                        <div class="family-meta">
+                                            <span class="member-role ${employee.id === familyGroup.primary_member_id ? 'primary' : 'member'}">
+                                                ${employee.id === familyGroup.primary_member_id ? 'Primary Member' : 'Family Member'}
+                                            </span>
+                                            <span class="members-count">${familyMembers.length + 1} members</span>
                                         </div>
-                                    `).join('')}
+                                    </div>
+                                </div>
+                                <div class="family-actions">
+                                    <button class="btn-secondary btn-sm" onclick="app.getManagers().employee.showFamilyGroupDetails('${familyGroup.id}')">
+                                        <i class="fas fa-eye"></i> View Family
+                                    </button>
+                                    ${employee.id !== familyGroup.primary_member_id ? `
+                                    <button class="btn-danger btn-sm" onclick="app.getManagers().employee.handleRemoveFromFamily('${employee.id}')">
+                                        <i class="fas fa-user-times"></i> Leave Family
+                                    </button>
+                                    ` : ''}
                                 </div>
                             </div>
-                            ` : ''}
                         </div>
                         ` : ''}
 
-                        <div class="details-section">
+                        <div class="quick-actions-section">
                             <h4>Quick Actions</h4>
-                            <div class="action-buttons-grid">
-                                <button class="btn-primary" onclick="app.getManagers().employee.editEmployee('${employee.id}')">
-                                    <i class="fas fa-edit"></i> Edit Employee
+                            <div class="quick-actions-grid">
+                                <button class="quick-action-btn" onclick="app.getManagers().employee.editEmployee('${employee.id}')">
+                                    <div class="action-icon edit">
+                                        <i class="fas fa-edit"></i>
+                                    </div>
+                                    <span>Edit Employee</span>
                                 </button>
-                                <button class="btn-secondary" onclick="app.getManagers().attendance.showQuickAttendanceModal('${employee.id}')">
-                                    <i class="fas fa-calendar-check"></i> Mark Attendance
+                                <button class="quick-action-btn" onclick="app.getManagers().attendance.showQuickAttendanceModal('${employee.id}')">
+                                    <div class="action-icon attendance">
+                                        <i class="fas fa-calendar-check"></i>
+                                    </div>
+                                    <span>Mark Attendance</span>
                                 </button>
-                                <button class="btn-secondary" onclick="app.getManagers().salary.showAdvanceModal('${employee.id}')">
-                                    <i class="fas fa-money-bill-wave"></i> Add Advance
+                                <button class="quick-action-btn" onclick="app.getManagers().salary.showAdvanceModal('${employee.id}')">
+                                    <div class="action-icon advance">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                    </div>
+                                    <span>Add Advance</span>
                                 </button>
                                 ${!familyGroup ? `
-                                <button class="btn-secondary" onclick="app.getManagers().employee.showAddToFamilyModal('${employee.id}')">
-                                    <i class="fas fa-users"></i> Add to Family Group
+                                <button class="quick-action-btn" onclick="app.getManagers().employee.showAddToFamilyModal('${employee.id}')">
+                                    <div class="action-icon family">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+                                    <span>Add to Family</span>
                                 </button>
-                                ` : `
-                                <button class="btn-warning" onclick="app.getManagers().employee.handleRemoveFromFamily('${employee.id}')">
-                                    <i class="fas fa-user-times"></i> Remove from Family
-                                </button>
-                                `}
+                                ` : ''}
                             </div>
                         </div>
                     </div>
@@ -2083,220 +2769,6 @@ class EmployeeManager {
 
     editFamilyGroup(familyGroupId) {
         this.showFamilyGroupModal(familyGroupId);
-    }
-
-    showManageFamilyGroupsModal() {
-        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
-            this.ui.showToast('Insufficient permissions to manage family groups', 'error');
-            return;
-        }
-
-        const modalHtml = `
-            <div id="manageFamilyGroupsModal" class="modal">
-                <div class="modal-content" style="max-width: 1000px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-users"></i> Manage Family Groups</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    
-                    <div class="modal-body">
-                        ${this.familyGroups.length === 0 ? `
-                            <div class="no-data">
-                                <i class="fas fa-users"></i>
-                                <br>
-                                No family groups found
-                                <br>
-                                <button class="btn-primary btn-sm" onclick="app.getManagers().employee.showFamilyGroupModal()" style="margin-top: 10px;">
-                                    <i class="fas fa-plus"></i> Create First Family Group
-                                </button>
-                            </div>
-                        ` : `
-                            <div class="table-responsive">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Family Name</th>
-                                            <th>Primary Member</th>
-                                            <th>Total Members</th>
-                                            <th>Bank Account</th>
-                                            <th>Created Date</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${this.familyGroups.map(familyGroup => {
-            const primaryMember = this.employees.find(emp => emp.id === familyGroup.primary_member_id);
-            const totalMembers = this.employees.filter(emp => emp.family_group_id === familyGroup.id).length;
-
-            return `
-                                                <tr>
-                                                    <td><strong>${familyGroup.family_name}</strong></td>
-                                                    <td>${primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'N/A'}</td>
-                                                    <td>${totalMembers}</td>
-                                                    <td>${familyGroup.bank_account_number || 'N/A'}</td>
-                                                    <td>${this.formatDate(familyGroup.created_at)}</td>
-                                                    <td>
-                                                        <div class="action-buttons">
-                                                            <button class="btn-secondary btn-sm view-family-group-btn" data-family-id="${familyGroup.id}" title="View Details">
-                                                                <i class="fas fa-eye"></i>
-                                                            </button>
-                                                            <button class="btn-secondary btn-sm edit-family-group-btn" data-family-id="${familyGroup.id}" title="Edit">
-                                                                <i class="fas fa-edit"></i>
-                                                            </button>
-                                                            <button class="btn-danger btn-sm delete-family-group-btn" data-family-id="${familyGroup.id}" title="Delete">
-                                                                <i class="fas fa-trash"></i>
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            `;
-        }).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `}
-                    </div>
-
-                    <div class="modal-actions">
-                        <button class="btn-secondary" onclick="app.getManagers().employee.closeManageFamilyGroups()">
-                            <i class="fas fa-times"></i> Close
-                        </button>
-                        <button class="btn-primary" onclick="app.getManagers().employee.showFamilyGroupModal()">
-                            <i class="fas fa-plus"></i> Create New Family Group
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        this.showCustomModal(modalHtml, 'manageFamilyGroupsModal');
-    }
-
-    closeManageFamilyGroups() {
-        this.ui.hideModal('manageFamilyGroupsModal');
-        const modal = document.getElementById('manageFamilyGroupsModal');
-        if (modal) {
-            modal.remove();
-        }
-    }
-
-    showFamilyGroupDetails(familyGroupId) {
-        const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
-        if (!familyGroup) {
-            this.ui.showToast('Family group not found', 'error');
-            return;
-        }
-
-        const primaryMember = this.employees.find(emp => emp.id === familyGroup.primary_member_id);
-        const familyMembers = this.employees.filter(emp => emp.family_group_id === familyGroupId);
-
-        const modalHtml = `
-            <div id="familyGroupDetailsModal" class="modal">
-                <div class="modal-content" style="max-width: 800px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-users"></i> Family Group Details - ${familyGroup.family_name}</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    
-                    <div class="family-details-container">
-                        <div class="details-section">
-                            <h4>Family Information</h4>
-                            <div class="details-grid">
-                                <div class="detail-item">
-                                    <label>Family Name:</label>
-                                    <span>${familyGroup.family_name}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Primary Member:</label>
-                                    <span>${primaryMember ? `${primaryMember.name} (${primaryMember.id})` : 'N/A'}</span>
-                                </div>
-                                <div class="detail-item">
-                                    <label>Total Members:</label>
-                                    <span>${familyMembers.length}</span>
-                                </div>
-                                ${familyGroup.bank_account_number ? `
-                                <div class="detail-item">
-                                    <label>Bank Account:</label>
-                                    <span>${familyGroup.bank_account_number}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.bank_name ? `
-                                <div class="detail-item">
-                                    <label>Bank Name:</label>
-                                    <span>${familyGroup.bank_name}</span>
-                                </div>
-                                ` : ''}
-                                ${familyGroup.ifsc_code ? `
-                                <div class="detail-item">
-                                    <label>IFSC Code:</label>
-                                    <span>${familyGroup.ifsc_code}</span>
-                                </div>
-                                ` : ''}
-                                <div class="detail-item">
-                                    <label>Created Date:</label>
-                                    <span>${this.formatDate(familyGroup.created_at)}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="details-section">
-                            <h4>Family Members (${familyMembers.length})</h4>
-                            ${familyMembers.length > 0 ? `
-                                <div class="members-table">
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Employee ID</th>
-                                                <th>Name</th>
-                                                <th>Role</th>
-                                                <th>Phone</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${familyMembers.map(member => `
-                                                <tr>
-                                                    <td><strong>${member.id}</strong></td>
-                                                    <td>${member.name}</td>
-                                                    <td>${member.role}</td>
-                                                    <td>${member.phone || 'N/A'}</td>
-                                                    <td><span class="status-badge status-${member.status || 'active'}">${member.status || 'active'}</span></td>
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ` : `
-                                <div class="no-data">
-                                    <i class="fas fa-user-times"></i>
-                                    <br>
-                                    No members in this family group
-                                </div>
-                            `}
-                        </div>
-                    </div>
-
-                    <div class="modal-actions">
-                        <button class="btn-secondary" onclick="app.getManagers().employee.closeFamilyGroupDetails()">
-                            <i class="fas fa-times"></i> Close
-                        </button>
-                        <button class="btn-primary" onclick="app.getManagers().employee.editFamilyGroup('${familyGroup.id}')">
-                            <i class="fas fa-edit"></i> Edit Family Group
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        this.showCustomModal(modalHtml, 'familyGroupDetailsModal');
-    }
-
-    closeFamilyGroupDetails() {
-        this.ui.hideModal('familyGroupDetailsModal');
-        const modal = document.getElementById('familyGroupDetailsModal');
-        if (modal) {
-            modal.remove();
-        }
     }
 
     showAddToFamilyModal(employeeId) {
@@ -2843,6 +3315,71 @@ class EmployeeManager {
             button.disabled = false;
             button.innerHTML = originalText;
         }
+    }
+
+    // NEW: Update primary member (from dropdown)
+    async updatePrimaryMember(familyGroupId) {
+        if (!this.auth.hasPermission('admin') && !this.auth.hasPermission('manager')) {
+            this.ui.showToast('Insufficient permissions to manage family groups', 'error');
+            return;
+        }
+
+        const newPrimaryMemberId = document.getElementById('newPrimaryMember')?.value;
+        if (!newPrimaryMemberId) {
+            this.ui.showToast('Please select a new primary member', 'error');
+            return;
+        }
+
+        const familyGroup = this.familyGroups.find(fg => fg.id === familyGroupId);
+        if (!familyGroup) {
+            this.ui.showToast('Family group not found', 'error');
+            return;
+        }
+
+        if (familyGroup.primary_member_id === newPrimaryMemberId) {
+            this.ui.showToast('This member is already the primary member', 'warning');
+            return;
+        }
+
+        const newPrimaryMember = this.employees.find(emp => emp.id === newPrimaryMemberId);
+        if (!newPrimaryMember) {
+            this.ui.showToast('Selected member not found', 'error');
+            return;
+        }
+
+        const confirmation = await this.ui.showConfirmation(
+            'Change Primary Member?',
+            `Are you sure you want to make ${newPrimaryMember.name} the primary member of ${familyGroup.family_name}?`,
+            'Change Primary',
+            'Cancel'
+        );
+
+        if (!confirmation) {
+            return;
+        }
+
+        try {
+            await this.db.update('family_groups', familyGroupId, {
+                primary_member_id: newPrimaryMemberId,
+                updated_at: new Date().toISOString()
+            });
+
+            this.ui.showToast(`Primary member updated to ${newPrimaryMember.name}`, 'success');
+
+            // Reload data and refresh modal
+            await this.loadFamilyGroups();
+            await this.loadEmployees();
+            this.showManageFamilyMembersModal(familyGroupId);
+
+        } catch (error) {
+            console.error('Error updating primary member:', error);
+            this.ui.showToast('Error updating primary member: ' + error.message, 'error');
+        }
+    }
+
+    // Add this method to handle the manage family members button
+    handleManageFamilyMembers(familyGroupId) {
+        this.showManageFamilyMembersModal(familyGroupId);
     }
 
     cleanup() {

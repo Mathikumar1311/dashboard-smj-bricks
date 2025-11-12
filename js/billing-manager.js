@@ -699,31 +699,31 @@ class BillingManager {
             }
 
             // Check for duplicate customer phone - AUTO CREATE CUSTOMER IF NOT EXISTS
-            if (!this.editingBillId) {
-                const customerManager = window.app?.getManagers()?.customer;
-                if (customerManager) {
-                    const existingCustomer = customerManager.findCustomerByPhone(customerPhone);
-                    if (!existingCustomer) {
-                        // Auto-create customer if doesn't exist
-                        try {
-                            const customerData = {
-                                name: this.Utils.sanitizeInput(customerName),
-                                phone: this.Utils.sanitizeInput(customerPhone),
-                                email: customerEmail ? this.Utils.sanitizeInput(customerEmail) : null,
-                                created_at: new Date().toISOString()
-                            };
-                            customerData.id = `CUST_${Date.now()}`;
-                            await this.db.create('customers', customerData);
-                            this.ui.showToast(`New customer "${customerName}" created automatically`, 'success');
-                            
-                            // Refresh customer data in customer manager
-                            if (customerManager.refreshCustomerData) {
-                                await customerManager.refreshCustomerData();
-                            }
-                        } catch (error) {
-                            console.error('Error auto-creating customer:', error);
-                            // Continue with bill creation even if customer creation fails
+            const customerManager = window.app?.getManagers()?.customer;
+            if (!this.editingBillId && customerManager) {
+                const existingCustomer = customerManager.findCustomerByPhone(customerPhone);
+                if (!existingCustomer) {
+                    // Auto-create customer if doesn't exist
+                    try {
+                        const customerData = {
+                            name: this.Utils.sanitizeInput(customerName),
+                            phone: this.Utils.sanitizeInput(customerPhone),
+                            email: customerEmail ? this.Utils.sanitizeInput(customerEmail) : null,
+                            created_at: new Date().toISOString()
+                        };
+                        customerData.id = `CUST_${Date.now()}`;
+                        await this.db.create('customers', customerData);
+                        this.ui.showToast(`New customer "${customerName}" created automatically`, 'success');
+                        
+                        // 🔧 FIXED: Force immediate sync with customer manager
+                        if (customerManager.syncWithBillingData) {
+                            await customerManager.syncWithBillingData();
+                        } else if (customerManager.refreshCustomerData) {
+                            await customerManager.refreshCustomerData();
                         }
+                    } catch (error) {
+                        console.error('Error auto-creating customer:', error);
+                        // Continue with bill creation even if customer creation fails
                     }
                 }
             }
@@ -806,6 +806,11 @@ class BillingManager {
             this.ui.hideModal('billModal');
             await this.loadBills();
             await this.loadPendingBills();
+
+            // 🔧 FIXED: Sync customer data after bill operations
+            if (customerManager && customerManager.syncWithBillingData) {
+                await customerManager.syncWithBillingData();
+            }
 
         } catch (error) {
             console.error('Error saving bill:', error);
@@ -1225,6 +1230,12 @@ class BillingManager {
                     await this.loadPendingBills();
                     await this.loadPayments();
 
+                    // 🔧 FIXED: Sync customer data after marking as paid
+                    const customerManager = window.app?.getManagers()?.customer;
+                    if (customerManager && customerManager.syncWithBillingData) {
+                        await customerManager.syncWithBillingData();
+                    }
+
                 } catch (error) {
                     console.error('Error updating bill:', error);
                     this.ui.showToast('Error updating bill: ' + error.message, 'error');
@@ -1257,6 +1268,13 @@ class BillingManager {
                     this.ui.showToast('Bill deleted successfully', 'success');
                     await this.loadBills();
                     await this.loadPendingBills();
+
+                    // 🔧 FIXED: Sync customer data after deletion
+                    const customerManager = window.app?.getManagers()?.customer;
+                    if (customerManager && customerManager.syncWithBillingData) {
+                        await customerManager.syncWithBillingData();
+                    }
+
                 } catch (error) {
                     console.error('Error deleting bill:', error);
                     this.ui.showToast('Error deleting bill: ' + error.message, 'error');
@@ -1280,10 +1298,14 @@ class BillingManager {
             this.bills = await this.db.getBills() || [];
             this.renderBillsTable(this.bills);
 
-            // Update customer manager with bills data
+            // 🔧 FIXED: Update customer manager with bills data
             const customerManager = window.app?.getManagers()?.customer;
-            if (customerManager && customerManager.updateBillsData) {
-                customerManager.updateBillsData(this.bills);
+            if (customerManager) {
+                if (customerManager.updateBillsData) {
+                    customerManager.updateBillsData(this.bills);
+                } else if (customerManager.syncWithBillingData) {
+                    await customerManager.syncWithBillingData();
+                }
             }
 
         } catch (error) {

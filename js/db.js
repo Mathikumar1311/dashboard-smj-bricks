@@ -492,27 +492,41 @@ class DatabaseManager {
     }
 
     /**
-     * 🗑️ DELETE RECORD
-     */
+ * 🗑️ DELETE RECORD - FIXED VERSION
+ */
     async delete(table, id) {
         this.validateTableName(table);
 
         const operation = async () => {
             if (this.isOnline && !this.missingTables.has(table)) {
+                console.log(`🗑️ Attempting to delete ${table} with id: ${id}`);
+
                 const { error } = await this.supabase
                     .from(table)
                     .delete()
                     .eq('id', id);
 
                 if (error) {
+                    console.error(`❌ Supabase delete error for ${table}:`, error);
+
                     if (this.isTableMissingError(error)) {
                         this.missingTables.add(table);
+                        console.log(`🔄 Table ${table} missing, using local delete`);
                         return this.deleteLocal(table, id);
                     }
+
+                    // 🆕 CRITICAL FIX: Don't fall back to local if constraint fails
+                    if (error.message.includes('foreign key constraint') || error.message.includes('violates foreign key')) {
+                        throw new Error(`DATABASE_CONSTRAINT: Cannot delete ${table} with id ${id}. Foreign key constraint violation.`);
+                    }
+
                     throw error;
                 }
+
+                console.log(`✅ Successfully deleted ${table} with id: ${id}`);
                 return true;
             } else {
+                console.log(`💾 Using local delete for ${table} with id: ${id}`);
                 return this.deleteLocal(table, id);
             }
         };
@@ -644,13 +658,19 @@ class DatabaseManager {
     }
 
     /**
-     * 🔄 EXECUTE WITH RETRY
-     */
+ * 🔄 EXECUTE WITH RETRY - FIXED VERSION
+ */
     async executeWithRetry(operation, operationId, retries = 3) {
         try {
             return await operation();
         } catch (error) {
             console.warn(`Operation ${operationId} failed:`, error.message);
+
+            // 🆕 CRITICAL FIX: Don't retry or go offline for constraint violations
+            if (error.message.includes('DATABASE_CONSTRAINT') || error.message.includes('foreign key constraint')) {
+                console.error(`❌ Constraint violation - cannot retry: ${operationId}`);
+                throw error; // Re-throw immediately without retry
+            }
 
             if (retries > 0 && this.isOnline) {
                 console.warn(`Retrying operation ${operationId}, ${retries} retries left`);
